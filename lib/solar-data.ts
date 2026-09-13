@@ -1,0 +1,13 @@
+export const bodies = [
+  { name: 'Sun', color: '#ffc56a', radius: 3.6, distance: 0, period: 0, periodLabel: '—', kind: 'G-TYPE STAR', description: 'The star at the center of our solar system. Its light and warmth reach every world in this view.' },
+  { name: 'Mercury', color: '#aea69a', radius: 0.48, distance: 7, period: 87.97, periodLabel: '88 Earth days', kind: 'TERRESTRIAL PLANET', description: 'Small, rocky, and closest to the Sun. Mercury races around its orbit faster than any other planet.' },
+  { name: 'Venus', color: '#e4bb7f', radius: 0.83, distance: 10, period: 224.7, periodLabel: '225 Earth days', kind: 'TERRESTRIAL PLANET', description: 'A rocky world wrapped in thick clouds. Its dense atmosphere traps heat beneath a pale, bright exterior.' },
+  { name: 'Earth', color: '#68b6e7', radius: 0.9, distance: 14, period: 365.25, periodLabel: '365.25 Earth days', kind: 'TERRESTRIAL PLANET', description: 'Our ocean-covered home. Look nearby for the Moon, traveling around Earth as both make their journey around the Sun.' },
+  { name: 'Moon', color: '#c6c7cc', radius: 0.245, distance: 2.3, period: 27.32, periodLabel: '27.3 Earth days', kind: 'EARTH’S NATURAL SATELLITE', description: 'A cratered companion, tidally locked to Earth. The Moon turns once per orbit, keeping the same face toward our planet.' },
+  { name: 'Mars', color: '#e68e68', radius: 0.65, distance: 18.5, period: 686.98, periodLabel: '687 Earth days', kind: 'TERRESTRIAL PLANET', description: 'The red planet. Iron-rich dust colors its surface, a landscape of volcanoes, canyons, and ancient riverbeds.' },
+  { name: 'Jupiter', color: '#d5b79a', radius: 2.05, distance: 25, period: 4332.59, periodLabel: '11.9 Earth years', kind: 'GAS GIANT', description: 'The largest planet in our solar system. Bands of clouds wrap around a world of powerful, long-lived storms.' },
+  { name: 'Saturn', color: '#d9c696', radius: 1.7, distance: 33, period: 10759.22, periodLabel: '29.5 Earth years', kind: 'GAS GIANT', description: 'A gas giant surrounded by sweeping rings. These rings are made of countless pieces of ice and rock.' },
+  { name: 'Uranus', color: '#9ad7df', radius: 1.18, distance: 41, period: 30688.5, periodLabel: '84 Earth years', kind: 'ICE GIANT', description: 'A quiet blue-green world with an extraordinary tilt. Uranus spins almost on its side as it circles the Sun.' },
+  { name: 'Neptune', color: '#638ce9', radius: 1.14, distance: 49, period: 60182, periodLabel: '164.8 Earth years', kind: 'ICE GIANT', description: 'The outermost planet. Cold and deep blue, Neptune takes almost 165 Earth years to complete a single orbit.' },
+] as const;
+export type BodyName = (typeof bodies)[number]['name'];
