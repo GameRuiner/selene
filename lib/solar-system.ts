@@ -127,7 +127,8 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
       const lat = latitude * degrees;
       const lon = longitude * degrees;
       const marker = new THREE.Mesh(markerGeometry, markerMaterial);
-      marker.position.set(Math.cos(lat) * Math.cos(lon) * 1.035, Math.sin(lat) * 1.035, Math.cos(lat) * Math.sin(lon) * 1.035);
+      // SphereGeometry mirrors the texture's east-west axis, so east longitudes use -z.
+      marker.position.set(Math.cos(lat) * Math.cos(lon) * 1.035, Math.sin(lat) * 1.035, -Math.cos(lat) * Math.sin(lon) * 1.035);
       marker.userData.name = name;
       markers.add(marker);
     });
