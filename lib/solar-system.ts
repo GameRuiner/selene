@@ -113,6 +113,26 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     geometries.push(geom); materials.push(mat);
     return new THREE.LineSegments(geom, mat);
   }
+  function earthLandmarks() {
+    const locations = [
+      { name: 'Stonehenge', latitude: 51.1789, longitude: -1.8262 },
+      { name: 'Great Pyramid of Giza', latitude: 29.9792, longitude: 31.1342 },
+      { name: 'Machu Picchu', latitude: -13.1631, longitude: -72.5459 },
+    ];
+    const markers = new THREE.Group();
+    const markerGeometry = new THREE.SphereGeometry(0.035, 12, 8);
+    const markerMaterial = new THREE.MeshBasicMaterial({ color: '#d9e895', depthTest: true });
+    geometries.push(markerGeometry); materials.push(markerMaterial);
+    locations.forEach(({ name, latitude, longitude }) => {
+      const lat = latitude * degrees;
+      const lon = longitude * degrees;
+      const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+      marker.position.set(Math.cos(lat) * Math.cos(lon) * 1.035, Math.sin(lat) * 1.035, Math.cos(lat) * Math.sin(lon) * 1.035);
+      marker.userData.name = name;
+      markers.add(marker);
+    });
+    return markers;
+  }
   const objects = bodies.map((body, index) => {
     const mat = new THREE.MeshStandardMaterial({ color: body.color, roughness: 0.95 });
     if (body.name === 'Earth' || body.name === 'Moon') { mat.map = texture(body.name === 'Earth' ? '/earth.jpg' : '/moon.jpg'); mat.color.set('white'); }
@@ -131,7 +151,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     mesh.scale.setScalar(bodyRadius(body));
     mesh.rotation.z = body.name === 'Earth' ? 0.409 : body.name === 'Uranus' ? 1.7 : 0;
     mesh.userData.name = body.name; group.add(mesh);
-    if (body.name === 'Earth') mesh.add(earthGrid());
+    if (body.name === 'Earth') { mesh.add(earthGrid()); mesh.add(earthLandmarks()); }
     const label = document.createElement('button');
     label.className = 'planet-label'; label.textContent = body.name;
     label.setAttribute('aria-label', `Focus ${body.name}`);

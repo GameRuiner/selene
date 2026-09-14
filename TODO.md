@@ -3,4 +3,4 @@
 - [x] Add toggle for real sizes and distances
 - [x] Add solar eclipse and lunar eclipse simulation
 - [x] Add smallest and biggest circumferences of Earth
-- [ ] Mark on Earth locations of Stonehenge, Great Pyramid of Giza, and Machu Picchu
+- [x] Mark on Earth locations of Stonehenge, Great Pyramid of Giza, and Machu Picchu
