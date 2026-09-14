@@ -45,7 +45,7 @@ export default function Home() {
     <main className="observatory">
       <div className="space-viewport" ref={host} />
       <header className="masthead">
-        <Link className="wordmark" href="/" aria-label="Moonwalk home"><Orbit size={27} strokeWidth={1.4} /> MOONWALK<span className="edition"> / 01</span></Link>
+        <Link className="wordmark" href="/" aria-label="Selene's space home"><Orbit size={27} strokeWidth={1.4} /> SELENE'S SPACE<span className="edition"> / 01</span></Link>
         <span className="live-status"><i /> Solar system explorer</span>
       </header>
       <section className="intro">

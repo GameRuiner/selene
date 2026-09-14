@@ -1,4 +1,4 @@
-# Moonwalk
+# Selene's space
 
 A local, interactive WebGL solar system built with Three.js, React, TypeScript, and Vinext.
 
