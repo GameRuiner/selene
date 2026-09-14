@@ -2,5 +2,5 @@
 - [x] Add meridians and parallels to Earth
 - [x] Add toggle for real sizes and distances
 - [x] Add solar eclipse and lunar eclipse simulation
-- [ ] Add smallest and biggest circumferences of Earth
+- [x] Add smallest and biggest circumferences of Earth
 - [ ] Mark on Earth locations of Stonehenge, Great Pyramid of Giza, and Machu Picchu
