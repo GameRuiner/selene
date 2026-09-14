@@ -16,6 +16,12 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   renderer.domElement.setAttribute('aria-label', 'Three-dimensional solar system. Use the object list to select a world, or drag and scroll on this view.');
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 1500);
   const controls = new OrbitControls(camera, renderer.domElement);
+  // OrbitControls writes touch-action: none inline. Restore vertical page scrolling on phones.
+  const mobileMedia = window.matchMedia('(max-width: 700px)');
+  const updateTouchAction = () => { renderer.domElement.style.touchAction = mobileMedia.matches ? 'pan-y' : 'none'; };
+  updateTouchAction();
+  if (mobileMedia.addEventListener) mobileMedia.addEventListener('change', updateTouchAction);
+  else mobileMedia.addListener(updateTouchAction);
   controls.enableDamping = true;
   controls.dampingFactor = 0.06;
   controls.minDistance = 1;
@@ -201,6 +207,8 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     reset() { days = 0; focus(null); },
     dispose() {
       renderer.setAnimationLoop(null); observer.disconnect(); controls.dispose();
+      if (mobileMedia.removeEventListener) mobileMedia.removeEventListener('change', updateTouchAction);
+      else mobileMedia.removeListener(updateTouchAction);
       renderer.domElement.removeEventListener('pointerdown', pointerDown);
       renderer.domElement.removeEventListener('pointerup', pointerUp);
       renderer.domElement.removeEventListener('webglcontextlost', contextLost);
