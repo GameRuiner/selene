@@ -234,7 +234,8 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   function focus(name: BodyName | null) {
     selected = name;
     const item = objects.find((obj) => obj.body.name === name);
-    const distance = item ? name === 'Earth' ? 10 : Math.max(item.body.radius * 7, 4) : home.length();
+    const preferredDistance = item ? name === 'Earth' ? 10 : Math.max(item.body.radius * 7, 4) : home.length();
+    const distance = item ? Math.min(camera.position.distanceTo(controls.target), preferredDistance) : home.length();
     controls.minDistance = item ? item.body.radius * 1.8 : 5;
     offset.set(0.4, 0.6, 1).normalize().multiplyScalar(distance);
     if (!item) offset.copy(home).multiplyScalar(width < 700 ? 1.4 : 1);
