@@ -158,13 +158,14 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     label.onclick = () => { focus(body.name); onSelect(body.name); };
     host.appendChild(label);
     if (body.distance && body.name !== 'Moon') orbit(body);
+    let ring: THREE.Mesh | null = null;
     if (body.name === 'Saturn') {
       const ringGeom = new THREE.RingGeometry(2.15, 3.5, 128, 6);
       const ringMat = new THREE.MeshStandardMaterial({ color: '#bca67b', side: THREE.DoubleSide, transparent: true, opacity: 0.7, roughness: 1 });
-      const ring = new THREE.Mesh(ringGeom, ringMat); ring.rotation.x = Math.PI / 2 - 0.4;
+      ring = new THREE.Mesh(ringGeom, ringMat); ring.rotation.x = Math.PI / 2 - 0.4;
       group.add(ring); geometries.push(ringGeom); materials.push(ringMat);
     }
-    return { body, group, mesh, label, phase: index * 2.399 + 0.6 };
+    return { body, group, mesh, ring, label, phase: index * 2.399 + 0.6 };
   });
   const earth = objects.find((item) => item.body.name === 'Earth')!;
   const moon = objects.find((item) => item.body.name === 'Moon')!;
@@ -268,12 +269,13 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   renderer.setAnimationLoop((now) => {
     const elapsed = Math.min((now - previous) / 1000, 0.05); previous = now;
     if (!document.hidden && !options.paused) days += elapsed * options.speed;
-    objects.forEach(({ body, group, mesh, phase, label }) => {
+    objects.forEach(({ body, group, mesh, ring, phase, label }) => {
       const angle = body.period ? days / body.period * Math.PI * 2 + phase : 0;
       if (body.distance) group.position.copy(orbitalPosition(body, angle));
       if (body.name === 'Moon') { group.position.add(earth.group.position); mesh.rotation.y = -angle; }
       else mesh.rotation.y = days / body.rotationPeriod * Math.PI * 2;
       mesh.scale.setScalar(bodyRadius(body));
+      ring?.scale.setScalar(bodyRadius(body) / body.radius);
       label.classList.toggle('selected', selected === body.name);
     });
     const target = objects.find((item) => item.body.name === selected)?.group.position;
