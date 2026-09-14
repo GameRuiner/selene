@@ -45,6 +45,7 @@ export default function Home() {
   const [dateTime, setDateTime] = useState(() => localDateTime(new Date()));
   const [simulationNow, setSimulationNow] = useState(() => new Date());
   const [moonPhase, setMoonPhase] = useState({ illumination: 0, name: 'New Moon' });
+  const [eclipse, setEclipse] = useState<{ type: string; detail: string } | null>(null);
   const [orbits, setOrbits] = useState(true);
   const [labels, setLabels] = useState(true);
   const [realScale, setRealScale] = useState(false);
@@ -77,6 +78,7 @@ export default function Home() {
       if (currentDate) setSimulationNow(currentDate);
       const currentMoonPhase = engine.current?.getMoonPhase();
       if (currentMoonPhase) setMoonPhase(currentMoonPhase);
+      setEclipse(engine.current?.getEclipseState() ?? null);
     }, 1_000);
     return () => window.clearInterval(timer);
   }, []);
@@ -117,6 +119,7 @@ export default function Home() {
         <h2>{body ? body.name : 'A little perspective.'}</h2>
         <p>{body ? body.description : 'Follow an orbit, find your home, or drift a little farther out. Select any world to take a closer look.'}</p>
         {body && <dl><div><dt>Orbit around</dt><dd>{body.name === 'Sun' ? '—' : body.name === 'Moon' ? 'Earth' : 'Sun'}</dd></div><div><dt>Orbital period</dt><dd>{body.periodLabel}</dd></div>{body.name === 'Moon' && <><div><dt>Phase</dt><dd>{moonPhase.name}</dd></div><div><dt>Illumination</dt><dd>{Math.round(moonPhase.illumination * 100)}%</dd></div></>}</dl>}
+        {eclipse && (body?.name === 'Earth' || body?.name === 'Moon') && <div className="eclipse-alert"><strong>{eclipse.type}</strong><span>{eclipse.detail}</span></div>}
         {body && <button className="recenter" onClick={() => focus(body.name)}><Crosshair size={15} /> Recenter {body.name}</button>}
         <div className="scale-note"><span>MODEL NOTES</span><p>Sizes and distances are compressed for visibility. Paths use each body’s eccentricity, orbital tilt, and relative period; positions are illustrative.</p></div>
       </aside>

@@ -54,6 +54,8 @@ dt { color: #8590a0; } dd { margin: 0; color: #d4dae4; }
 .scale-note { padding-top: 21px; margin-top: 18px; border-top: 1px solid #ffffff12; }
 .scale-note span { font-size: 12px; letter-spacing: 0.12em; color: #788392; }
 .scale-note p { font-size: 12px; color: #7f8a9c; line-height: 1.7; margin-bottom: 0; }
+.eclipse-alert { display: grid; gap: 4px; margin: 16px 0; padding: 10px 12px; border-left: 2px solid #d5a15e; background: #d5a15e12; color: #d9c7ab; font-size: 12px; line-height: 1.45; }
+.eclipse-alert strong { color: #f0d6ab; font-size: 13px; font-weight: 500; }
 .bottom-area { position: absolute; bottom: 24px; left: 42px; right: 42px; pointer-events: none; }
 .controls-bar { display: flex; align-items: center; gap: 26px; max-width: 850px; margin: 0 auto 28px; padding: 16px 20px; background: #10141ce8; backdrop-filter: blur(16px); border: 1px solid #ffffff18; border-radius: 12px; box-shadow: 0 10px 40px #0005; pointer-events: auto; }
 .play-button { display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; border: none; border-radius: 50%; color: #13180d; background: #c4d5a4; }
