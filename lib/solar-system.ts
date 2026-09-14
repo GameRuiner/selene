@@ -113,6 +113,16 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   const earth = objects.find((item) => item.body.name === 'Earth')!;
   const moon = objects.find((item) => item.body.name === 'Moon')!;
   const moonPath = orbit(moon.body, earth.group);
+  const moonPhase = () => {
+    const moonToSun = moon.group.position.clone().multiplyScalar(-1).normalize();
+    const moonToEarth = earth.group.position.clone().sub(moon.group.position).normalize();
+    const illumination = (1 + moonToSun.dot(moonToEarth)) / 2;
+    const earthToSun = earth.group.position.clone().multiplyScalar(-1).normalize();
+    const earthToMoon = moon.group.position.clone().sub(earth.group.position).normalize();
+    const angle = (Math.atan2(-new THREE.Vector3(0, 1, 0).dot(earthToSun.cross(earthToMoon)), earthToSun.dot(earthToMoon)) + Math.PI * 2) % (Math.PI * 2);
+    const phaseNames = ['New Moon', 'Waxing Crescent', 'First Quarter', 'Waxing Gibbous', 'Full Moon', 'Waning Gibbous', 'Last Quarter', 'Waning Crescent'];
+    return { illumination, name: phaseNames[Math.round(angle / (Math.PI / 4)) % phaseNames.length] };
+  };
   const sunGlowMat = new THREE.ShaderMaterial({
     uniforms: { tint: { value: new THREE.Color('#ff9c38') } },
     vertexShader: 'varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
@@ -207,6 +217,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     setOptions(next: Options) { options = next; },
     setDate(date: Date) { days = (date.getTime() - J2000_EPOCH) / 86_400_000; },
     getDate() { return new Date(J2000_EPOCH + days * 86_400_000); },
+    getMoonPhase: moonPhase,
     reset() { days = (Date.now() - J2000_EPOCH) / 86_400_000; focus(null); },
     dispose() {
       renderer.setAnimationLoop(null); observer.disconnect(); controls.dispose();
