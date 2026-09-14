@@ -71,7 +71,7 @@ export default function Home() {
         <p>{body ? body.description : 'Follow an orbit, find your home, or drift a little farther out. Select any world to take a closer look.'}</p>
         {body && <dl><div><dt>Orbit around</dt><dd>{body.name === 'Sun' ? '—' : body.name === 'Moon' ? 'Earth' : 'Sun'}</dd></div><div><dt>Orbital period</dt><dd>{body.periodLabel}</dd></div></dl>}
         {body && <button className="recenter" onClick={() => focus(body.name)}><Crosshair size={15} /> Recenter {body.name}</button>}
-        <div className="scale-note"><span>MODEL NOTES</span><p>Sizes and distances are compressed for visibility. Circular orbits use relative orbital periods; positions are illustrative.</p></div>
+        <div className="scale-note"><span>MODEL NOTES</span><p>Sizes and distances are compressed for visibility. Paths use each body’s eccentricity, orbital tilt, and relative period; positions are illustrative.</p></div>
       </aside>
       {error && <div className="scene-message" role="alert">{error}</div>}
       {!ready && !error && <output className="scene-message">Preparing your solar system…</output>}

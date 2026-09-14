@@ -52,8 +52,19 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     textures.push(result);
     return result;
   }
-  function orbit(radius: number, parent: THREE.Object3D = paths) {
-    const points = Array.from({ length: 256 }, (_, i) => new THREE.Vector3(Math.cos(i / 256 * Math.PI * 2) * radius, 0, Math.sin(i / 256 * Math.PI * 2) * radius));
+  type OrbitalBody = (typeof bodies)[number];
+  const degrees = Math.PI / 180;
+  const orbitalPosition = (body: OrbitalBody, meanAnomaly: number, target = new THREE.Vector3()) => {
+    // Kepler's equation preserves the faster sweep through periapsis.
+    let eccentricAnomaly = meanAnomaly;
+    for (let i = 0; i < 6; i++) eccentricAnomaly -= (eccentricAnomaly - body.eccentricity * Math.sin(eccentricAnomaly) - meanAnomaly) / (1 - body.eccentricity * Math.cos(eccentricAnomaly));
+    const x = body.distance * (Math.cos(eccentricAnomaly) - body.eccentricity);
+    const z = body.distance * Math.sqrt(1 - body.eccentricity ** 2) * Math.sin(eccentricAnomaly);
+    target.set(x, 0, z).applyAxisAngle(new THREE.Vector3(0, 1, 0), body.periapsis * degrees).applyAxisAngle(new THREE.Vector3(1, 0, 0), body.inclination * degrees);
+    return target;
+  };
+  function orbit(body: OrbitalBody, parent: THREE.Object3D = paths) {
+    const points = Array.from({ length: 256 }, (_, i) => orbitalPosition(body, i / 256 * Math.PI * 2));
     const geom = new THREE.BufferGeometry().setFromPoints(points);
     const mat = new THREE.LineBasicMaterial({ color: 0x75829c, transparent: true, opacity: 0.23 });
     const line = new THREE.LineLoop(geom, mat);
@@ -83,7 +94,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     label.setAttribute('aria-label', `Focus ${body.name}`);
     label.onclick = () => { focus(body.name); onSelect(body.name); };
     host.appendChild(label);
-    if (body.distance && body.name !== 'Moon') orbit(body.distance);
+    if (body.distance && body.name !== 'Moon') orbit(body);
     if (body.name === 'Saturn') {
       const ringGeom = new THREE.RingGeometry(2.15, 3.5, 128, 6);
       const ringMat = new THREE.MeshStandardMaterial({ color: '#bca67b', side: THREE.DoubleSide, transparent: true, opacity: 0.7, roughness: 1 });
@@ -93,7 +104,8 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     return { body, group, mesh, label, phase: index * 2.399 + 0.6 };
   });
   const earth = objects.find((item) => item.body.name === 'Earth')!;
-  const moonPath = orbit(2.3, earth.group);
+  const moon = objects.find((item) => item.body.name === 'Moon')!;
+  const moonPath = orbit(moon.body, earth.group);
   const sunGlowMat = new THREE.ShaderMaterial({
     uniforms: { tint: { value: new THREE.Color('#ff9c38') } },
     vertexShader: 'varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
@@ -156,7 +168,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     if (!document.hidden && !options.paused) days += elapsed * options.speed;
     objects.forEach(({ body, group, mesh, phase, label }) => {
       const angle = body.period ? days / body.period * Math.PI * 2 + phase : 0;
-      if (body.distance) group.position.set(Math.cos(angle) * body.distance, 0, Math.sin(angle) * body.distance);
+      if (body.distance) group.position.copy(orbitalPosition(body, angle));
       if (body.name === 'Moon') { group.position.add(earth.group.position); mesh.rotation.y = -angle; }
       else mesh.rotation.y = days * 0.12;
       label.classList.toggle('selected', selected === body.name);
