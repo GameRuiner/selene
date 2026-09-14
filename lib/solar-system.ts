@@ -4,6 +4,7 @@ import { bodies, type BodyName } from './solar-data';
 
 export type SolarSystem = ReturnType<typeof createSolarSystem>;
 type Options = { paused: boolean; speed: number; orbits: boolean; labels: boolean };
+const J2000_EPOCH = Date.UTC(2000, 0, 1, 12);
 
 export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyName | null) => void, onError: (message: string) => void, onReady: () => void) {
   const scene = new THREE.Scene();
@@ -122,7 +123,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   const glow = new THREE.Mesh(glowGeometry, sunGlowMat);
   scene.add(glow); geometries.push(glowGeometry); materials.push(sunGlowMat);
   let options: Options = { paused: false, speed: 12, orbits: true, labels: true };
-  let days = 0;
+  let days = (Date.now() - J2000_EPOCH) / 86_400_000;
   let selected: BodyName | null = null;
   let transition = false;
   const offset = new THREE.Vector3();
@@ -176,7 +177,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
       const angle = body.period ? days / body.period * Math.PI * 2 + phase : 0;
       if (body.distance) group.position.copy(orbitalPosition(body, angle));
       if (body.name === 'Moon') { group.position.add(earth.group.position); mesh.rotation.y = -angle; }
-      else mesh.rotation.y = days * 0.12;
+      else mesh.rotation.y = days / body.rotationPeriod * Math.PI * 2;
       label.classList.toggle('selected', selected === body.name);
     });
     const target = objects.find((item) => item.body.name === selected)?.group.position;
@@ -204,7 +205,9 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   return {
     focus,
     setOptions(next: Options) { options = next; },
-    reset() { days = 0; focus(null); },
+    setDate(date: Date) { days = (date.getTime() - J2000_EPOCH) / 86_400_000; },
+    getDate() { return new Date(J2000_EPOCH + days * 86_400_000); },
+    reset() { days = (Date.now() - J2000_EPOCH) / 86_400_000; focus(null); },
     dispose() {
       renderer.setAnimationLoop(null); observer.disconnect(); controls.dispose();
       if (mobileMedia.removeEventListener) mobileMedia.removeEventListener('change', updateTouchAction);

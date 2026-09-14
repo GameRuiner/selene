@@ -10,16 +10,45 @@ import { bodies, type BodyName } from '@/lib/solar-data';
 import { createSolarSystem, type SolarSystem } from '@/lib/solar-system';
 import { registerExplorerTool } from '@/lib/explorer-tool';
 
+const speedStops = [
+  { daysPerSecond: 1 / 86_400, label: '1×' },
+  { daysPerSecond: 1 / 1_440, label: '1 MIN / SEC' },
+  { daysPerSecond: 1 / 96, label: '15 MIN / SEC' },
+  { daysPerSecond: 1 / 24, label: '1 HOUR / SEC' },
+  { daysPerSecond: 0.125, label: '3 HOURS / SEC' },
+  { daysPerSecond: 0.25, label: '6 HOURS / SEC' },
+  { daysPerSecond: 0.5, label: '12 HOURS / SEC' },
+  { daysPerSecond: 0.75, label: '18 HOURS / SEC' },
+  { daysPerSecond: 1, label: '1 DAY / SEC' },
+  { daysPerSecond: 2, label: '2 DAYS / SEC' },
+  { daysPerSecond: 5, label: '5 DAYS / SEC' },
+  { daysPerSecond: 12, label: '12 DAYS / SEC' },
+  { daysPerSecond: 25, label: '25 DAYS / SEC' },
+  { daysPerSecond: 50, label: '50 DAYS / SEC' },
+  { daysPerSecond: 100, label: '100 DAYS / SEC' },
+] as const;
+
+function localDateTime(date: Date) {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+function simulationDateTime(date: Date) {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' }).format(date);
+}
+
 export default function Home() {
   const host = useRef<HTMLDivElement>(null);
   const engine = useRef<SolarSystem | null>(null);
   const [selected, setSelected] = useState<BodyName | null>(null);
   const [paused, setPaused] = useState(false);
-  const [speed, setSpeed] = useState(12);
+  const [speedIndex, setSpeedIndex] = useState(0);
+  const [dateTime, setDateTime] = useState(() => localDateTime(new Date()));
+  const [simulationNow, setSimulationNow] = useState(() => new Date());
   const [orbits, setOrbits] = useState(true);
   const [labels, setLabels] = useState(true);
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
+  const speed = speedStops[speedIndex].daysPerSecond;
 
   useEffect(() => {
     if (!host.current) return;
@@ -33,6 +62,20 @@ export default function Home() {
     return () => { engine.current?.dispose(); engine.current = null; };
   }, []);
   useEffect(() => { engine.current?.setOptions({ paused, speed, orbits, labels }); }, [paused, speed, orbits, labels]);
+  useEffect(() => {
+    const selectedDate = new Date(dateTime);
+    if (!Number.isNaN(selectedDate.getTime())) {
+      engine.current?.setDate(selectedDate);
+      setSimulationNow(selectedDate);
+    }
+  }, [dateTime]);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const currentDate = engine.current?.getDate();
+      if (currentDate) setSimulationNow(currentDate);
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
   useEffect(() => registerExplorerTool((name) => {
     if (!engine.current) throw new Error('The solar system is not ready.');
     engine.current.focus(name);
@@ -78,11 +121,12 @@ export default function Home() {
       <footer className="bottom-area">
         <div className="controls-bar">
           <button className="play-button" aria-label={paused ? 'Resume simulation' : 'Pause simulation'} onClick={() => setPaused(!paused)}>{paused ? <Play size={18} fill="currentColor" /> : <Pause size={18} fill="currentColor" />}</button>
-          <div className="speed-control"><div><span id="speed-label">TIME SPEED</span><output>{speed} days / sec</output></div><Slider aria-labelledby="speed-label" value={[speed]} min={1} max={100} step={1} onValueChange={(value) => setSpeed(Array.isArray(value) ? value[0] : value)} /></div>
+          <div className="speed-control"><div><span id="speed-label">TIME SPEED</span><output>{speedStops[speedIndex].label}</output></div><Slider aria-labelledby="speed-label" aria-valuetext={speedStops[speedIndex].label} value={[speedIndex]} min={0} max={speedStops.length - 1} step={1} onValueChange={(value) => setSpeedIndex(Array.isArray(value) ? value[0] : value)} /></div>
+          <label className="date-control"><span>SET SIMULATION DATE</span><input type="datetime-local" value={dateTime} onChange={(event) => setDateTime(event.target.value)} /><output aria-live="polite">NOW · {simulationDateTime(simulationNow)}</output></label>
           <div className="control-divider" />
           <div className="toggle-control"><label htmlFor="orbit-toggle">Orbits</label><Switch id="orbit-toggle" checked={orbits} onCheckedChange={setOrbits} aria-label="Show orbits" /></div>
           <div className="toggle-control"><label htmlFor="label-toggle">Labels</label><Switch id="label-toggle" checked={labels} onCheckedChange={setLabels} aria-label="Show labels" /></div>
-          <button className="reset-button" onClick={() => { focus(null); setPaused(false); setSpeed(12); setOrbits(true); setLabels(true); engine.current?.reset(); }} aria-label="Reset simulation"><RotateCcw size={17} /></button>
+          <button className="reset-button" onClick={() => { focus(null); setPaused(false); setSpeedIndex(0); setDateTime(localDateTime(new Date())); setOrbits(true); setLabels(true); engine.current?.reset(); }} aria-label="Reset simulation"><RotateCcw size={17} /></button>
         </div>
         <div className="footer-meta"><span>DRAG TO ORBIT <b>·</b> SCROLL TO ZOOM <b>·</b> CLICK TO EXPLORE</span><span>WEBGL <i /> LIVE SIMULATION</span></div>
       </footer>
