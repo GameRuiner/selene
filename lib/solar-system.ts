@@ -3,8 +3,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { bodies, type BodyName } from './solar-data';
 
 export type SolarSystem = ReturnType<typeof createSolarSystem>;
-type Options = { paused: boolean; speed: number; orbits: boolean; labels: boolean };
+type Options = { paused: boolean; speed: number; orbits: boolean; labels: boolean; realScale: boolean };
 const J2000_EPOCH = Date.UTC(2000, 0, 1, 12);
+const semiMajorAxisAU: Record<BodyName, number> = { Sun: 0, Mercury: 0.387, Venus: 0.723, Earth: 1, Moon: 0.00257, Mars: 1.524, Jupiter: 5.203, Saturn: 9.537, Uranus: 19.191, Neptune: 30.07 };
+const radiusInEarths: Record<BodyName, number> = { Sun: 109.1, Mercury: 0.383, Venus: 0.949, Earth: 1, Moon: 0.273, Mars: 0.532, Jupiter: 11.21, Saturn: 9.45, Uranus: 4.01, Neptune: 3.88 };
+const sceneAU = 14;
+const earthRadiiPerAU = 23_455;
 
 export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyName | null) => void, onError: (message: string) => void, onReady: () => void) {
   const scene = new THREE.Scene();
@@ -61,12 +65,16 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   }
   type OrbitalBody = (typeof bodies)[number];
   const degrees = Math.PI / 180;
+  let realScale = false;
+  const orbitRadius = (body: OrbitalBody) => realScale ? semiMajorAxisAU[body.name] * sceneAU : body.distance;
+  const bodyRadius = (body: OrbitalBody) => realScale ? radiusInEarths[body.name] * sceneAU / earthRadiiPerAU : body.radius;
   const orbitalPosition = (body: OrbitalBody, meanAnomaly: number, target = new THREE.Vector3()) => {
     // Kepler's equation preserves the faster sweep through periapsis.
     let eccentricAnomaly = meanAnomaly;
     for (let i = 0; i < 6; i++) eccentricAnomaly -= (eccentricAnomaly - body.eccentricity * Math.sin(eccentricAnomaly) - meanAnomaly) / (1 - body.eccentricity * Math.cos(eccentricAnomaly));
-    const x = body.distance * (Math.cos(eccentricAnomaly) - body.eccentricity);
-    const z = body.distance * Math.sqrt(1 - body.eccentricity ** 2) * Math.sin(eccentricAnomaly);
+    const radius = orbitRadius(body);
+    const x = radius * (Math.cos(eccentricAnomaly) - body.eccentricity);
+    const z = radius * Math.sqrt(1 - body.eccentricity ** 2) * Math.sin(eccentricAnomaly);
     target.set(x, 0, z).applyAxisAngle(new THREE.Vector3(0, 1, 0), body.periapsis * degrees).applyAxisAngle(new THREE.Vector3(1, 0, 0), body.inclination * degrees);
     return target;
   };
@@ -75,6 +83,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     const geom = new THREE.BufferGeometry().setFromPoints(points);
     const mat = new THREE.LineBasicMaterial({ color: 0x75829c, transparent: true, opacity: 0.23 });
     const line = new THREE.LineLoop(geom, mat);
+    line.userData.orbitBody = body;
     parent.add(line); geometries.push(geom); materials.push(mat);
     return line;
   }
@@ -119,7 +128,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     materials.push(mat);
     const group = new THREE.Group(); scene.add(group);
     const mesh = new THREE.Mesh(geometry, mat);
-    mesh.scale.setScalar(body.radius);
+    mesh.scale.setScalar(bodyRadius(body));
     mesh.rotation.z = body.name === 'Earth' ? 0.409 : body.name === 'Uranus' ? 1.7 : 0;
     mesh.userData.name = body.name; group.add(mesh);
     if (body.name === 'Earth') mesh.add(earthGrid());
@@ -159,7 +168,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   const glowGeometry = new THREE.PlaneGeometry(23, 23);
   const glow = new THREE.Mesh(glowGeometry, sunGlowMat);
   scene.add(glow); geometries.push(glowGeometry); materials.push(sunGlowMat);
-  let options: Options = { paused: false, speed: 12, orbits: true, labels: true };
+  let options: Options = { paused: false, speed: 12, orbits: true, labels: true, realScale: false };
   let days = (Date.now() - J2000_EPOCH) / 86_400_000;
   let selected: BodyName | null = null;
   let transition = false;
@@ -171,6 +180,24 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   const destination = new THREE.Vector3();
   const delta = new THREE.Vector3();
   let width = 1, height = 1;
+  function refreshOrbitLines() {
+    paths.traverse((item) => {
+      const body = item.userData.orbitBody as OrbitalBody | undefined;
+      if (!body || !(item instanceof THREE.LineLoop)) return;
+      const attribute = item.geometry.getAttribute('position') as THREE.BufferAttribute;
+      for (let i = 0; i < 256; i++) {
+        const point = orbitalPosition(body, i / 256 * Math.PI * 2);
+        attribute.setXYZ(i, point.x, point.y, point.z);
+      }
+      attribute.needsUpdate = true; item.geometry.computeBoundingSphere();
+    });
+    const moonAttribute = moonPath.geometry.getAttribute('position') as THREE.BufferAttribute;
+    for (let i = 0; i < 256; i++) {
+      const point = orbitalPosition(moon.body, i / 256 * Math.PI * 2);
+      moonAttribute.setXYZ(i, point.x, point.y, point.z);
+    }
+    moonAttribute.needsUpdate = true; moonPath.geometry.computeBoundingSphere();
+  }
   function focus(name: BodyName | null) {
     selected = name;
     const item = objects.find((obj) => obj.body.name === name);
@@ -215,6 +242,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
       if (body.distance) group.position.copy(orbitalPosition(body, angle));
       if (body.name === 'Moon') { group.position.add(earth.group.position); mesh.rotation.y = -angle; }
       else mesh.rotation.y = days / body.rotationPeriod * Math.PI * 2;
+      mesh.scale.setScalar(bodyRadius(body));
       label.classList.toggle('selected', selected === body.name);
     });
     const target = objects.find((item) => item.body.name === selected)?.group.position;
@@ -241,7 +269,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   });
   return {
     focus,
-    setOptions(next: Options) { options = next; },
+    setOptions(next: Options) { if (next.realScale !== options.realScale) { realScale = next.realScale; refreshOrbitLines(); focus(null); } options = next; },
     setDate(date: Date) { days = (date.getTime() - J2000_EPOCH) / 86_400_000; },
     getDate() { return new Date(J2000_EPOCH + days * 86_400_000); },
     getMoonPhase: moonPhase,

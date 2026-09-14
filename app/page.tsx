@@ -47,6 +47,7 @@ export default function Home() {
   const [moonPhase, setMoonPhase] = useState({ illumination: 0, name: 'New Moon' });
   const [orbits, setOrbits] = useState(true);
   const [labels, setLabels] = useState(true);
+  const [realScale, setRealScale] = useState(false);
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
   const speed = speedStops[speedIndex].daysPerSecond;
@@ -62,7 +63,7 @@ export default function Home() {
     }
     return () => { engine.current?.dispose(); engine.current = null; };
   }, []);
-  useEffect(() => { engine.current?.setOptions({ paused, speed, orbits, labels }); }, [paused, speed, orbits, labels]);
+  useEffect(() => { engine.current?.setOptions({ paused, speed, orbits, labels, realScale }); }, [paused, speed, orbits, labels, realScale]);
   useEffect(() => {
     const selectedDate = new Date(dateTime);
     if (!Number.isNaN(selectedDate.getTime())) {
@@ -129,7 +130,8 @@ export default function Home() {
           <div className="control-divider" />
           <div className="toggle-control"><label htmlFor="orbit-toggle">Orbits</label><Switch id="orbit-toggle" checked={orbits} onCheckedChange={setOrbits} aria-label="Show orbits" /></div>
           <div className="toggle-control"><label htmlFor="label-toggle">Labels</label><Switch id="label-toggle" checked={labels} onCheckedChange={setLabels} aria-label="Show labels" /></div>
-          <button className="reset-button" onClick={() => { focus(null); setPaused(false); setSpeedIndex(0); setDateTime(localDateTime(new Date())); setOrbits(true); setLabels(true); engine.current?.reset(); }} aria-label="Reset simulation"><RotateCcw size={17} /></button>
+          <div className="toggle-control"><label htmlFor="scale-toggle">True scale</label><Switch id="scale-toggle" checked={realScale} onCheckedChange={setRealScale} aria-label="Use real sizes and distances" /></div>
+          <button className="reset-button" onClick={() => { focus(null); setPaused(false); setSpeedIndex(0); setDateTime(localDateTime(new Date())); setOrbits(true); setLabels(true); setRealScale(false); engine.current?.reset(); }} aria-label="Reset simulation"><RotateCcw size={17} /></button>
         </div>
         <div className="footer-meta"><span>DRAG TO ORBIT <b>·</b> SCROLL TO ZOOM <b>·</b> CLICK TO EXPLORE</span><span>WEBGL <i /> LIVE SIMULATION</span></div>
       </footer>
