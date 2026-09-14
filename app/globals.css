@@ -79,6 +79,8 @@ dt { color: #8590a0; } dd { margin: 0; color: #d4dae4; }
 }
 @media (max-width: 700px) {
   .observatory { min-height: 850px; }
+  /* Keep vertical swipes for page scrolling; horizontal drags can still rotate the model. */
+  .space-viewport canvas { touch-action: pan-y; }
   .masthead { height: 74px; padding: 0 20px; } .live-status { display: none; }
   .intro { top: 101px; left: 20px; } h1 { font-size: 34px; } .intro > p:last-of-type { font-size: 13px; }
   .object-panel { display: flex; gap: 5px; overflow-x: auto; top: 263px; left: 16px; right: 16px; width: auto; padding: 5px 3px 10px; }
