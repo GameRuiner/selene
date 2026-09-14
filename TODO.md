@@ -1,5 +1,5 @@
 - [x] Add moon phases
-- [ ] Add meridians and parallels to Earth
+- [x] Add meridians and parallels to Earth
 - [ ] Add toggle for real sizes and distances
 - [ ] Add solar eclipse and lunar eclipse simulation
 - [ ] Add smallest and biggest circumferences of Earth

@@ -78,6 +78,32 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     parent.add(line); geometries.push(geom); materials.push(mat);
     return line;
   }
+  function earthGrid() {
+    const points: THREE.Vector3[] = [];
+    const radius = 1.008;
+    const segments = 72;
+    const addLine = (pointAt: (step: number) => THREE.Vector3) => {
+      for (let step = 0; step < segments; step++) points.push(pointAt(step), pointAt(step + 1));
+    };
+    for (let latitude = -60; latitude <= 60; latitude += 30) {
+      const lat = latitude * degrees;
+      addLine((step) => {
+        const longitude = step / segments * Math.PI * 2;
+        return new THREE.Vector3(Math.cos(lat) * Math.cos(longitude) * radius, Math.sin(lat) * radius, Math.cos(lat) * Math.sin(longitude) * radius);
+      });
+    }
+    for (let longitude = 0; longitude < 180; longitude += 30) {
+      const lon = longitude * degrees;
+      addLine((step) => {
+        const lat = -Math.PI / 2 + step / segments * Math.PI;
+        return new THREE.Vector3(Math.cos(lat) * Math.cos(lon) * radius, Math.sin(lat) * radius, Math.cos(lat) * Math.sin(lon) * radius);
+      });
+    }
+    const geom = new THREE.BufferGeometry().setFromPoints(points);
+    const mat = new THREE.LineBasicMaterial({ color: 0xb7dcff, transparent: true, opacity: 0.28, depthWrite: false });
+    geometries.push(geom); materials.push(mat);
+    return new THREE.LineSegments(geom, mat);
+  }
   const objects = bodies.map((body, index) => {
     const mat = new THREE.MeshStandardMaterial({ color: body.color, roughness: 0.95 });
     if (body.name === 'Earth' || body.name === 'Moon') { mat.map = texture(body.name === 'Earth' ? '/earth.jpg' : '/moon.jpg'); mat.color.set('white'); }
@@ -96,6 +122,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     mesh.scale.setScalar(body.radius);
     mesh.rotation.z = body.name === 'Earth' ? 0.409 : body.name === 'Uranus' ? 1.7 : 0;
     mesh.userData.name = body.name; group.add(mesh);
+    if (body.name === 'Earth') mesh.add(earthGrid());
     const label = document.createElement('button');
     label.className = 'planet-label'; label.textContent = body.name;
     label.setAttribute('aria-label', `Focus ${body.name}`);
