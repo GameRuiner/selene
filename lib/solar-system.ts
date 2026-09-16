@@ -5,6 +5,8 @@ import { bodies, type BodyName } from './solar-data';
 export type SolarSystem = ReturnType<typeof createSolarSystem>;
 type Options = { paused: boolean; speed: number; orbits: boolean; labels: boolean; realScale: boolean };
 const J2000_EPOCH = Date.UTC(2000, 0, 1, 12);
+const KNOWN_NEW_MOON_DAY = (Date.UTC(2000, 0, 6, 18, 14) - J2000_EPOCH) / 86_400_000;
+const SYNODIC_MONTH = 29.530588853;
 const semiMajorAxisAU: Record<BodyName, number> = { Sun: 0, Mercury: 0.387, Venus: 0.723, Earth: 1, Moon: 0.00257, Mars: 1.524, Jupiter: 5.203, Saturn: 9.537, Uranus: 19.191, Neptune: 30.07 };
 const radiusInEarths: Record<BodyName, number> = { Sun: 109.1, Mercury: 0.383, Venus: 0.949, Earth: 1, Moon: 0.273, Mars: 0.532, Jupiter: 11.21, Saturn: 9.45, Uranus: 4.01, Neptune: 3.88 };
 const sceneAU = 14;
@@ -101,7 +103,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
         return new THREE.Vector3(Math.cos(lat) * Math.cos(longitude) * radius, Math.sin(lat) * radius, Math.cos(lat) * Math.sin(longitude) * radius);
       });
     }
-    for (let longitude = 0; longitude < 180; longitude += 30) {
+    for (let longitude = 0; longitude < 360; longitude += 30) {
       const lon = longitude * degrees;
       addLine((step) => {
         const lat = -Math.PI / 2 + step / segments * Math.PI;
@@ -134,6 +136,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     });
     return markers;
   }
+  let earthGridLine: THREE.LineSegments | null = null;
   const objects = bodies.map((body, index) => {
     const mat = new THREE.MeshStandardMaterial({ color: body.color, roughness: 0.95 });
     if (body.name === 'Earth' || body.name === 'Moon') { mat.map = texture(body.name === 'Earth' ? '/earth.jpg' : '/moon.jpg'); mat.color.set('white'); }
@@ -148,11 +151,17 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     }
     materials.push(mat);
     const group = new THREE.Group(); scene.add(group);
+    const axialTilt = new THREE.Group(); group.add(axialTilt);
     const mesh = new THREE.Mesh(geometry, mat);
     mesh.scale.setScalar(bodyRadius(body));
-    mesh.rotation.z = body.name === 'Earth' ? 0.409 : body.name === 'Uranus' ? 1.7 : 0;
-    mesh.userData.name = body.name; group.add(mesh);
-    if (body.name === 'Earth') { mesh.add(earthGrid()); mesh.add(earthLandmarks()); }
+    if (body.name === 'Earth') axialTilt.rotation.x = -23.44 * degrees;
+    else if (body.name === 'Uranus') axialTilt.rotation.z = 1.7;
+    mesh.userData.name = body.name; axialTilt.add(mesh);
+    if (body.name === 'Earth') {
+      earthGridLine = earthGrid();
+      mesh.add(earthGridLine);
+      mesh.add(earthLandmarks());
+    }
     const label = document.createElement('button');
     label.className = 'planet-label'; label.textContent = body.name;
     label.setAttribute('aria-label', `Focus ${body.name}`);
@@ -166,18 +175,17 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
       ring = new THREE.Mesh(ringGeom, ringMat); ring.rotation.x = Math.PI / 2 - 0.4;
       group.add(ring); geometries.push(ringGeom); materials.push(ringMat);
     }
-    return { body, group, mesh, ring, label, phase: index * 2.399 + 0.6 };
+    // The lunar offset is anchored to the 2000-01-06 18:14 UTC new moon.
+    const phase = body.name === 'Moon' ? 0.9573515073 : body.name === 'Earth' ? 357.529 * degrees : index * 2.399 + 0.6;
+    return { body, group, mesh, ring, label, phase };
   });
   const earth = objects.find((item) => item.body.name === 'Earth')!;
   const moon = objects.find((item) => item.body.name === 'Moon')!;
   const moonPath = orbit(moon.body, earth.group);
+  const lunarPhaseAngle = () => ((days - KNOWN_NEW_MOON_DAY) % SYNODIC_MONTH + SYNODIC_MONTH) % SYNODIC_MONTH / SYNODIC_MONTH * Math.PI * 2;
   const moonPhase = () => {
-    const moonToSun = moon.group.position.clone().multiplyScalar(-1).normalize();
-    const moonToEarth = earth.group.position.clone().sub(moon.group.position).normalize();
-    const illumination = (1 + moonToSun.dot(moonToEarth)) / 2;
-    const earthToSun = earth.group.position.clone().multiplyScalar(-1).normalize();
-    const earthToMoon = moon.group.position.clone().sub(earth.group.position).normalize();
-    const angle = (Math.atan2(-new THREE.Vector3(0, 1, 0).dot(earthToSun.cross(earthToMoon)), earthToSun.dot(earthToMoon)) + Math.PI * 2) % (Math.PI * 2);
+    const angle = lunarPhaseAngle();
+    const illumination = (1 - Math.cos(angle)) / 2;
     const phaseNames = ['New Moon', 'Waxing Crescent', 'First Quarter', 'Waxing Gibbous', 'Full Moon', 'Waning Gibbous', 'Last Quarter', 'Waning Crescent'];
     return { illumination, name: phaseNames[Math.round(angle / (Math.PI / 4)) % phaseNames.length] };
   };
@@ -234,9 +242,13 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   function focus(name: BodyName | null) {
     selected = name;
     const item = objects.find((obj) => obj.body.name === name);
-    const preferredDistance = item ? name === 'Earth' ? 10 : Math.max(item.body.radius * 7, 4) : home.length();
+    const preferredDistance = item
+      ? realScale
+        ? Math.max(bodyRadius(item.body) * 8, 0.04)
+        : Math.max(item.body.radius * 7, 4)
+      : home.length();
     const distance = item ? Math.min(camera.position.distanceTo(controls.target), preferredDistance) : home.length();
-    controls.minDistance = item ? item.body.radius * 1.8 : 5;
+    controls.minDistance = item ? Math.max(bodyRadius(item.body) * 1.8, 0.001) : 5;
     offset.set(0.4, 0.6, 1).normalize().multiplyScalar(distance);
     if (!item) offset.copy(home).multiplyScalar(width < 700 ? 1.4 : 1);
     transition = true;
@@ -253,17 +265,53 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   const pointer = new THREE.Vector2();
   const start = new THREE.Vector2();
   const raycaster = new THREE.Raycaster();
-  const pointerDown = (event: PointerEvent) => start.set(event.clientX, event.clientY);
-  const pointerUp = (event: PointerEvent) => {
-    if (start.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 5) return;
+  raycaster.params.Line = { threshold: 0.035 };
+  const gridTooltip = document.createElement('div');
+  gridTooltip.className = 'earth-grid-tooltip';
+  gridTooltip.hidden = true;
+  host.appendChild(gridTooltip);
+  const setPointerFromEvent = (event: PointerEvent) => {
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1);
     raycaster.setFromCamera(pointer, camera);
-    const hit = raycaster.intersectObjects(objects.map((obj) => obj.mesh))[0];
+    return rect;
+  };
+  const pointerDown = (event: PointerEvent) => start.set(event.clientX, event.clientY);
+  const pointerMove = (event: PointerEvent) => {
+    if (event.pointerType !== 'mouse' && event.pointerType !== 'pen') return;
+    const rect = setPointerFromEvent(event);
+    const hit = earthGridLine ? raycaster.intersectObject(earthGridLine, false)[0] : undefined;
+    if (!hit) { gridTooltip.hidden = true; return; }
+    const local = earth.mesh.worldToLocal(hit.point.clone()).normalize();
+    const cameraDirection = earth.mesh.worldToLocal(camera.position.clone()).sub(local).normalize();
+    if (local.dot(cameraDirection) <= 0) { gridTooltip.hidden = true; return; }
+    const latitude = Math.asin(THREE.MathUtils.clamp(local.y, -1, 1)) / degrees;
+    const longitude = THREE.MathUtils.euclideanModulo(Math.atan2(-local.z, local.x) / degrees + 180, 360) - 180;
+    const nearestLatitude = Math.round(latitude / 30) * 30;
+    const nearestLongitude = Math.round(longitude / 30) * 30;
+    const latitudeDelta = Math.abs(latitude - nearestLatitude);
+    const longitudeDelta = Math.abs(longitude - nearestLongitude);
+    const showLatitude = Math.abs(nearestLatitude) <= 60 && latitudeDelta <= longitudeDelta;
+    const value = showLatitude ? nearestLatitude : nearestLongitude;
+    const suffix = value === 0 ? '' : showLatitude ? value > 0 ? ' N' : ' S' : value > 0 ? ' E' : ' W';
+    gridTooltip.textContent = `${Math.abs(value)}°${suffix} ${showLatitude ? 'latitude' : 'longitude'}`;
+    gridTooltip.style.left = `${event.clientX - rect.left + 14}px`;
+    gridTooltip.style.top = `${event.clientY - rect.top + 14}px`;
+    gridTooltip.hidden = false;
+  };
+  const pointerLeave = () => { gridTooltip.hidden = true; };
+  const pointerUp = (event: PointerEvent) => {
+    if (start.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 5) return;
+    setPointerFromEvent(event);
+    // Only select the body mesh. Earth has grid and landmark children whose names
+    // are not BodyName values and previously sent focus back to the overview.
+    const hit = raycaster.intersectObjects(objects.map((obj) => obj.mesh), false)[0];
     if (hit) { const name = hit.object.userData.name as BodyName; focus(name); onSelect(name); }
   };
   const contextLost = (event: Event) => { event.preventDefault(); options.paused = true; onError('The graphics connection was interrupted. Reload the page to restart the model.'); };
   renderer.domElement.addEventListener('pointerdown', pointerDown);
+  renderer.domElement.addEventListener('pointermove', pointerMove);
+  renderer.domElement.addEventListener('pointerleave', pointerLeave);
   renderer.domElement.addEventListener('pointerup', pointerUp);
   renderer.domElement.addEventListener('webglcontextlost', contextLost);
   let previous = performance.now();
@@ -274,8 +322,12 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     objects.forEach(({ body, group, mesh, ring, phase, label }) => {
       const angle = body.period ? days / body.period * Math.PI * 2 + phase : 0;
       if (body.distance) group.position.copy(orbitalPosition(body, angle));
-      if (body.name === 'Moon') { group.position.add(earth.group.position); mesh.rotation.y = -angle; }
-      else mesh.rotation.y = days / body.rotationPeriod * Math.PI * 2;
+      if (body.name === 'Moon') {
+        const phaseAngle = lunarPhaseAngle();
+        const radius = orbitRadius(body);
+        group.position.copy(earth.group.position).multiplyScalar(-1).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), -phaseAngle).multiplyScalar(radius).add(earth.group.position);
+        mesh.rotation.y = -phaseAngle;
+      } else mesh.rotation.y = days / body.rotationPeriod * Math.PI * 2;
       mesh.scale.setScalar(bodyRadius(body));
       ring?.scale.setScalar(bodyRadius(body) / body.radius);
       label.classList.toggle('selected', selected === body.name);
@@ -315,10 +367,12 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
       if (mobileMedia.removeEventListener) mobileMedia.removeEventListener('change', updateTouchAction);
       else mobileMedia.removeListener(updateTouchAction);
       renderer.domElement.removeEventListener('pointerdown', pointerDown);
+      renderer.domElement.removeEventListener('pointermove', pointerMove);
+      renderer.domElement.removeEventListener('pointerleave', pointerLeave);
       renderer.domElement.removeEventListener('pointerup', pointerUp);
       renderer.domElement.removeEventListener('webglcontextlost', contextLost);
       geometries.forEach((item) => item.dispose()); materials.forEach((item) => item.dispose()); textures.forEach((item) => item.dispose());
-      objects.forEach((item) => item.label.remove()); renderer.dispose(); renderer.domElement.remove();
+      objects.forEach((item) => item.label.remove()); gridTooltip.remove(); renderer.dispose(); renderer.domElement.remove();
     },
   };
 }
