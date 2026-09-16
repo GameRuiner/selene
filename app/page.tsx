@@ -7,7 +7,7 @@ import { ArrowUpRight, Crosshair, Orbit, Pause, Play, RotateCcw } from 'lucide-r
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { bodies, type BodyName } from '@/lib/solar-data';
-import { createSolarSystem, type SolarSystem } from '@/lib/solar-system';
+import { createSolarSystem, type LandmarkSelection, type SolarSystem } from '@/lib/solar-system';
 import { registerExplorerTool } from '@/lib/explorer-tool';
 
 const speedStops = [
@@ -40,6 +40,7 @@ export default function Home() {
   const host = useRef<HTMLDivElement>(null);
   const engine = useRef<SolarSystem | null>(null);
   const [selected, setSelected] = useState<BodyName | null>(null);
+  const [selectedLandmark, setSelectedLandmark] = useState<LandmarkSelection>(null);
   const [paused, setPaused] = useState(false);
   const [speedIndex, setSpeedIndex] = useState(0);
   const [dateTime, setDateTime] = useState(() => localDateTime(new Date()));
@@ -56,7 +57,7 @@ export default function Home() {
   useEffect(() => {
     if (!host.current) return;
     try {
-      engine.current = createSolarSystem(host.current, setSelected, setError, () => setReady(true));
+      engine.current = createSolarSystem(host.current, setSelected, setSelectedLandmark, setError, () => setReady(true));
     } catch {
       // Renderer startup can fail synchronously; show its error in the interface.
       // oxlint-disable-next-line react/react-compiler
@@ -85,14 +86,23 @@ export default function Home() {
   useEffect(() => registerExplorerTool((name) => {
     if (!engine.current) throw new Error('The solar system is not ready.');
     engine.current.focus(name);
+    setSelectedLandmark(null);
     flushSync(() => setSelected(name));
   }), []);
-  const focus = (name: BodyName | null) => { setSelected(name); engine.current?.focus(name); };
+  const focus = (name: BodyName | null) => { setSelected(name); setSelectedLandmark(null); engine.current?.focus(name); };
   const body = selected ? bodies.find((item) => item.name === selected) : null;
 
   return (
     <main className="observatory">
       <div className="space-viewport" ref={host} />
+      {selectedLandmark && <section className="landmark-popover" style={{ left: selectedLandmark.x, top: selectedLandmark.y }} role="dialog" aria-label={`${selectedLandmark.landmark.name} landmark details`}>
+        <button className="landmark-close" onClick={() => setSelectedLandmark(null)} aria-label="Close landmark details">×</button>
+        <span>EARTH LANDMARK</span>
+        <h3>{selectedLandmark.landmark.name}</h3>
+        <p>{selectedLandmark.landmark.location}</p>
+        <p>{selectedLandmark.landmark.description}</p>
+        <small>{Math.abs(selectedLandmark.landmark.latitude).toFixed(4)}° {selectedLandmark.landmark.latitude >= 0 ? 'N' : 'S'} · {Math.abs(selectedLandmark.landmark.longitude).toFixed(4)}° {selectedLandmark.landmark.longitude >= 0 ? 'E' : 'W'}</small>
+      </section>}
       <header className="masthead">
         <Link className="wordmark" href="/" aria-label="Selene's space home"><Orbit size={27} strokeWidth={1.4} /> SELENE'S SPACE<span className="edition"> / 01</span></Link>
         <span className="live-status"><i /> Solar system explorer</span>
@@ -118,7 +128,7 @@ export default function Home() {
         <p className="eyebrow">{body ? body.kind : 'THE BIG PICTURE'}</p>
         <h2>{body ? body.name : 'A little perspective.'}</h2>
         <p>{body ? body.description : 'Follow an orbit, find your home, or drift a little farther out. Select any world to take a closer look.'}</p>
-        {body && <dl><div><dt>Orbit around</dt><dd>{body.name === 'Sun' ? '—' : body.name === 'Moon' ? 'Earth' : 'Sun'}</dd></div><div><dt>Orbital period</dt><dd>{body.periodLabel}</dd></div>{body.name === 'Moon' && <><div><dt>Phase</dt><dd>{moonPhase.name}</dd></div><div><dt>Illumination</dt><dd>{Math.round(moonPhase.illumination * 100)}%</dd></div></>}{body.name === 'Earth' && <><div><dt>Equatorial circumference</dt><dd>40,075 km</dd></div><div><dt>Polar circumference</dt><dd>40,008 km</dd></div><div><dt>Landmarks</dt><dd>3 marked sites</dd></div></>}</dl>}
+        {body && <dl><div><dt>Orbit around</dt><dd>{body.name === 'Sun' ? '—' : body.name === 'Moon' ? 'Earth' : 'Sun'}</dd></div><div><dt>Orbital period</dt><dd>{body.periodLabel}</dd></div>{body.name === 'Moon' && <><div><dt>Phase</dt><dd>{moonPhase.name}</dd></div><div><dt>Illumination</dt><dd>{Math.round(moonPhase.illumination * 100)}%</dd></div></>}{body.name === 'Earth' && <div><dt>Landmarks</dt><dd>3 marked sites</dd></div>}</dl>}
         {eclipse && (body?.name === 'Earth' || body?.name === 'Moon') && <div className="eclipse-alert"><strong>{eclipse.type}</strong><span>{eclipse.detail}</span></div>}
         {body && <button className="recenter" onClick={() => focus(body.name)}><Crosshair size={15} /> Recenter {body.name}</button>}
         <div className="scale-note"><span>MODEL NOTES</span><p>Sizes and distances are compressed for visibility. Paths use each body’s eccentricity, orbital tilt, and relative period; positions are illustrative.</p></div>

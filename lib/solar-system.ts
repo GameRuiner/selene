@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { bodies, type BodyName } from './solar-data';
+import meridianData from './earth-meridian-lengths.json';
 
 export type SolarSystem = ReturnType<typeof createSolarSystem>;
+export type Landmark = { name: string; location: string; latitude: number; longitude: number; description: string };
+export type LandmarkSelection = { landmark: Landmark; x: number; y: number } | null;
 type Options = { paused: boolean; speed: number; orbits: boolean; labels: boolean; realScale: boolean };
 const J2000_EPOCH = Date.UTC(2000, 0, 1, 12);
 const KNOWN_NEW_MOON_DAY = (Date.UTC(2000, 0, 6, 18, 14) - J2000_EPOCH) / 86_400_000;
@@ -11,8 +14,27 @@ const semiMajorAxisAU: Record<BodyName, number> = { Sun: 0, Mercury: 0.387, Venu
 const radiusInEarths: Record<BodyName, number> = { Sun: 109.1, Mercury: 0.383, Venus: 0.949, Earth: 1, Moon: 0.273, Mars: 0.532, Jupiter: 11.21, Saturn: 9.45, Uranus: 4.01, Neptune: 3.88 };
 const sceneAU = 14;
 const earthRadiiPerAU = 23_455;
+const WGS84_SEMI_MAJOR_METERS = 6_378_137;
+const WGS84_INVERSE_FLATTENING = 298.257223563;
+const WGS84_MERIDIONAL_CIRCUMFERENCE_KM = 40_007.863;
+const terrainMeridianLengthKm = new Map(
+  meridianData.loops.map((loop) => [loop.orientationDegrees, loop.lengthKm]),
+);
 
-export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyName | null) => void, onError: (message: string) => void, onReady: () => void) {
+function parallelCircumferenceKm(latitudeDegrees: number) {
+  const flattening = 1 / WGS84_INVERSE_FLATTENING;
+  const eccentricitySquared = 2 * flattening - flattening ** 2;
+  const latitude = latitudeDegrees * Math.PI / 180;
+  const primeVerticalRadius = WGS84_SEMI_MAJOR_METERS / Math.sqrt(1 - eccentricitySquared * Math.sin(latitude) ** 2);
+  return 2 * Math.PI * primeVerticalRadius * Math.cos(latitude) / 1_000;
+}
+
+function physicalMeridianLengthKm(longitudeDegrees: number) {
+  const orientation = THREE.MathUtils.euclideanModulo(longitudeDegrees, 180);
+  return terrainMeridianLengthKm.get(orientation) ?? WGS84_MERIDIONAL_CIRCUMFERENCE_KM;
+}
+
+export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyName | null) => void, onLandmarkSelect: (selection: LandmarkSelection) => void, onError: (message: string) => void, onReady: () => void) {
   const scene = new THREE.Scene();
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -91,47 +113,60 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   }
   function earthGrid() {
     const points: THREE.Vector3[] = [];
+    const colors: number[] = [];
     const radius = 1.008;
     const segments = 72;
-    const addLine = (pointAt: (step: number) => THREE.Vector3) => {
-      for (let step = 0; step < segments; step++) points.push(pointAt(step), pointAt(step + 1));
+    const gridColor = 0x718ca5;
+    const largestColor = 0xf2c96d;
+    const smallestColor = 0x74dec0;
+    const addLine = (pointAt: (step: number) => THREE.Vector3, color: number) => {
+      const lineColor = new THREE.Color(color);
+      for (let step = 0; step < segments; step++) {
+        points.push(pointAt(step), pointAt(step + 1));
+        lineColor.toArray(colors, colors.length);
+        lineColor.toArray(colors, colors.length);
+      }
     };
     for (let latitude = -60; latitude <= 60; latitude += 30) {
       const lat = latitude * degrees;
       addLine((step) => {
         const longitude = step / segments * Math.PI * 2;
         return new THREE.Vector3(Math.cos(lat) * Math.cos(longitude) * radius, Math.sin(lat) * radius, Math.cos(lat) * Math.sin(longitude) * radius);
-      });
+      }, latitude === 0 ? largestColor : gridColor);
     }
     for (let longitude = 0; longitude < 360; longitude += 30) {
       const lon = longitude * degrees;
       addLine((step) => {
         const lat = -Math.PI / 2 + step / segments * Math.PI;
         return new THREE.Vector3(Math.cos(lat) * Math.cos(lon) * radius, Math.sin(lat) * radius, Math.cos(lat) * Math.sin(lon) * radius);
-      });
+      }, longitude === 0 || longitude === 180 ? smallestColor : gridColor);
     }
     const geom = new THREE.BufferGeometry().setFromPoints(points);
-    const mat = new THREE.LineBasicMaterial({ color: 0xb7dcff, transparent: true, opacity: 0.28, depthWrite: false });
+    geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    const mat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.48, depthWrite: false });
     geometries.push(geom); materials.push(mat);
     return new THREE.LineSegments(geom, mat);
   }
+  const earthLandmarkMeshes: THREE.Mesh[] = [];
   function earthLandmarks() {
-    const locations = [
-      { name: 'Stonehenge', latitude: 51.1789, longitude: -1.8262 },
-      { name: 'Great Pyramid of Giza', latitude: 29.9792, longitude: 31.1342 },
-      { name: 'Machu Picchu', latitude: -13.1631, longitude: -72.5459 },
+    const locations: Landmark[] = [
+      { name: 'Stonehenge', location: 'Wiltshire, England', latitude: 51.1789, longitude: -1.8262, description: 'A prehistoric stone circle built in stages between roughly 3000 and 1600 BCE.' },
+      { name: 'Great Pyramid of Giza', location: 'Giza, Egypt', latitude: 29.9792, longitude: 31.1342, description: 'The largest pyramid at Giza, built as the tomb of Pharaoh Khufu around 2600 BCE.' },
+      { name: 'Machu Picchu', location: 'Cusco Region, Peru', latitude: -13.1631, longitude: -72.5459, description: 'A 15th-century Inca citadel set high in the eastern Andes.' },
     ];
     const markers = new THREE.Group();
     const markerGeometry = new THREE.SphereGeometry(0.035, 12, 8);
     const markerMaterial = new THREE.MeshBasicMaterial({ color: '#d9e895', depthTest: true });
     geometries.push(markerGeometry); materials.push(markerMaterial);
-    locations.forEach(({ name, latitude, longitude }) => {
+    locations.forEach((landmark) => {
+      const { latitude, longitude } = landmark;
       const lat = latitude * degrees;
       const lon = longitude * degrees;
       const marker = new THREE.Mesh(markerGeometry, markerMaterial);
       // SphereGeometry mirrors the texture's east-west axis, so east longitudes use -z.
       marker.position.set(Math.cos(lat) * Math.cos(lon) * 1.035, Math.sin(lat) * 1.035, -Math.cos(lat) * Math.sin(lon) * 1.035);
-      marker.userData.name = name;
+      marker.userData.landmark = landmark;
+      earthLandmarkMeshes.push(marker);
       markers.add(marker);
     });
     return markers;
@@ -165,7 +200,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     const label = document.createElement('button');
     label.className = 'planet-label'; label.textContent = body.name;
     label.setAttribute('aria-label', `Focus ${body.name}`);
-    label.onclick = () => { focus(body.name); onSelect(body.name); };
+    label.onclick = () => { focus(body.name); onSelect(body.name); onLandmarkSelect(null); };
     host.appendChild(label);
     if (body.distance && body.name !== 'Moon') orbit(body);
     let ring: THREE.Mesh | null = null;
@@ -295,6 +330,14 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     const value = showLatitude ? nearestLatitude : nearestLongitude;
     const suffix = value === 0 ? '' : showLatitude ? value > 0 ? ' N' : ' S' : value > 0 ? ' E' : ' W';
     gridTooltip.textContent = `${Math.abs(value)}°${suffix} ${showLatitude ? 'latitude' : 'longitude'}`;
+    const measurement = document.createElement('span');
+    const isLargest = showLatitude && value === 0;
+    const isSmallest = !showLatitude && THREE.MathUtils.euclideanModulo(value, 180) === 0;
+    measurement.className = isLargest ? 'largest' : isSmallest ? 'smallest' : '';
+    measurement.textContent = showLatitude
+      ? `${isLargest ? 'Largest circumference (equator)' : 'Parallel circumference'} · ${parallelCircumferenceKm(value).toLocaleString(undefined, { maximumFractionDigits: 3 })} km`
+      : `${isSmallest ? 'Smallest measured meridian' : 'Approx. terrain surface loop'} · ${physicalMeridianLengthKm(value).toLocaleString(undefined, { maximumFractionDigits: 0 })} km`;
+    gridTooltip.appendChild(measurement);
     gridTooltip.style.left = `${event.clientX - rect.left + 14}px`;
     gridTooltip.style.top = `${event.clientY - rect.top + 14}px`;
     gridTooltip.hidden = false;
@@ -306,6 +349,20 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     // Only select the body mesh. Earth has grid and landmark children whose names
     // are not BodyName values and previously sent focus back to the overview.
     const hit = raycaster.intersectObjects(objects.map((obj) => obj.mesh), false)[0];
+    const landmarkHit = raycaster.intersectObjects(earthLandmarkMeshes, false)[0];
+    const landmarkLocal = landmarkHit ? earth.mesh.worldToLocal(landmarkHit.point.clone()).normalize() : null;
+    const landmarkCameraDirection = landmarkLocal ? earth.mesh.worldToLocal(camera.position.clone()).sub(landmarkLocal).normalize() : null;
+    if (landmarkHit && landmarkLocal && landmarkCameraDirection && landmarkLocal.dot(landmarkCameraDirection) > 0) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      const popupWidth = Math.min(280, rect.width - 24);
+      const x = Math.max(12, Math.min(event.clientX - rect.left + 14, rect.width - popupWidth - 12));
+      const y = Math.max(12, Math.min(event.clientY - rect.top + 14, rect.height - 210));
+      selected = 'Earth';
+      onSelect('Earth');
+      onLandmarkSelect({ landmark: landmarkHit.object.userData.landmark as Landmark, x, y });
+      return;
+    }
+    onLandmarkSelect(null);
     if (hit) { const name = hit.object.userData.name as BodyName; focus(name); onSelect(name); }
   };
   const contextLost = (event: Event) => { event.preventDefault(); options.paused = true; onError('The graphics connection was interrupted. Reload the page to restart the model.'); };

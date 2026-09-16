@@ -56,6 +56,13 @@ dt { color: #8590a0; } dd { margin: 0; color: #d4dae4; }
 .scale-note p { font-size: 12px; color: #7f8a9c; line-height: 1.7; margin-bottom: 0; }
 .eclipse-alert { display: grid; gap: 4px; margin: 16px 0; padding: 10px 12px; border-left: 2px solid #d5a15e; background: #d5a15e12; color: #d9c7ab; font-size: 12px; line-height: 1.45; }
 .eclipse-alert strong { color: #f0d6ab; font-size: 13px; font-weight: 500; }
+.landmark-popover { position: absolute; z-index: 7; width: min(280px, calc(100vw - 24px)); padding: 14px 38px 14px 15px; border: 1px solid #c4d5a44a; border-radius: 8px; background: #0b1118f2; box-shadow: 0 16px 44px #0009; backdrop-filter: blur(14px); }
+.landmark-popover > span { color: #99a28f; font-size: 11px; letter-spacing: 0.12em; }
+.landmark-popover h3 { margin: 7px 0 3px; color: #e8eddc; font-size: 17px; font-weight: 500; }
+.landmark-popover p { margin: 4px 0; color: #a0a9b8; font-size: 12px; line-height: 1.45; }
+.landmark-popover small { display: block; margin-top: 9px; color: #c4d5a4; font-size: 11px; }
+.landmark-close { position: absolute; top: 7px; right: 8px; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; background: transparent; color: #8994a4; font-size: 21px; line-height: 1; }
+.landmark-close:hover { color: #eef2e8; }
 .bottom-area { position: absolute; bottom: 24px; left: 42px; right: 42px; pointer-events: none; }
 .controls-bar { display: flex; align-items: center; gap: 26px; max-width: 850px; margin: 0 auto 28px; padding: 16px 20px; background: #10141ce8; backdrop-filter: blur(16px); border: 1px solid #ffffff18; border-radius: 12px; box-shadow: 0 10px 40px #0005; pointer-events: auto; }
 .play-button { display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; border: none; border-radius: 50%; color: #13180d; background: #c4d5a4; }
@@ -74,7 +81,10 @@ dt { color: #8590a0; } dd { margin: 0; color: #d4dae4; }
 .footer-meta i { margin: 0 7px; }
 .planet-label { position: absolute; top: 0; left: 0; padding: 6px 9px; border: 0; border-radius: 4px; background: #080c1270; color: #b4becf; font-size: 12px; letter-spacing: 0.04em; }
 .planet-label:hover, .planet-label.selected { color: #e2edcf; background: #263021b3; }
-.earth-grid-tooltip { position: absolute; z-index: 5; padding: 6px 8px; border: 1px solid #c4d5a438; border-radius: 4px; background: #080c12e6; color: #dce8c8; font-size: 12px; line-height: 1; letter-spacing: 0.04em; pointer-events: none; white-space: nowrap; }
+.earth-grid-tooltip { position: absolute; z-index: 5; display: grid; gap: 5px; padding: 7px 9px; border: 1px solid #c4d5a438; border-radius: 4px; background: #080c12e6; color: #dce8c8; font-size: 12px; line-height: 1; letter-spacing: 0.04em; pointer-events: none; white-space: nowrap; }
+.earth-grid-tooltip span { color: #9ba992; font-size: 11px; letter-spacing: 0.01em; }
+.earth-grid-tooltip span.largest { color: #f2c96d; }
+.earth-grid-tooltip span.smallest { color: #74dec0; }
 .scene-message { position: absolute; top: 44%; left: 50%; transform: translate(-50%, -50%); max-width: 420px; padding: 24px; border: 1px solid #ffffff30; background: #111722; border-radius: 10px; line-height: 1.7; }
 @media (max-width: 1100px) {
   .masthead { padding: 0 26px; } .intro, .object-panel { left: 26px; }
