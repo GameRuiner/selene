@@ -1,10 +1,15 @@
 - [x] Add moon phases
 - [x] Add meridians and parallels to Earth. show degrees of latitude and longitude on hover, show circumference if possible
 - [x] Add toggle for real sizes and distances
-- [ ] Add solar eclipse and lunar eclipse simulation. mb mark them on calendar
+- [ ] Add solar eclipse and lunar eclipse simulation. mb mark them on calendar, add possibility to see them from earth
 - [x] Add smallest and biggest circumferences of Earth
 - [x] Mark on Earth locations of Stonehenge, Great Pyramid of Giza, and Machu Picchu, show info on click
-- [ ] Redesign time, can me merge current time and date into one, add eclipses and equinoxes to be visible in calender. easy way to set time now
+- [x] Redesign time, can me merge current time and date into one, add eclipses and equinoxes to be visible in calender. easy way to set time now
+- [ ] Add possibility to change month and year
 - [ ] Fix bug for 180 E W longitude
+- [ ] Add moon circumference.
+- [ ] Add sizes and masses of celestial bodies
+- [ ] Add moons for other planets
+- [ ] Add possibility to view from earth
 
 what is lunar eclipse

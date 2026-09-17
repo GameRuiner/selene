@@ -6,6 +6,7 @@ import { flushSync } from 'react-dom';
 import { ArrowUpRight, Crosshair, Orbit, Pause, Play, RotateCcw } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
+import { SimulationTimePicker } from '@/components/simulation-time-picker';
 import { bodies, type BodyName } from '@/lib/solar-data';
 import { createSolarSystem, type LandmarkSelection, type SolarSystem } from '@/lib/solar-system';
 import { registerExplorerTool } from '@/lib/explorer-tool';
@@ -28,14 +29,6 @@ const speedStops = [
   { daysPerSecond: 100, label: '100 DAYS / SEC' },
 ] as const;
 
-function localDateTime(date: Date) {
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-}
-
-function simulationDateTime(date: Date) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' }).format(date);
-}
-
 export default function Home() {
   const host = useRef<HTMLDivElement>(null);
   const engine = useRef<SolarSystem | null>(null);
@@ -43,7 +36,6 @@ export default function Home() {
   const [selectedLandmark, setSelectedLandmark] = useState<LandmarkSelection>(null);
   const [paused, setPaused] = useState(false);
   const [speedIndex, setSpeedIndex] = useState(0);
-  const [dateTime, setDateTime] = useState(() => localDateTime(new Date()));
   const [simulationNow, setSimulationNow] = useState(() => new Date());
   const [moonPhase, setMoonPhase] = useState({ illumination: 0, name: 'New Moon' });
   const [eclipse, setEclipse] = useState<{ type: string; detail: string } | null>(null);
@@ -67,13 +59,6 @@ export default function Home() {
   }, []);
   useEffect(() => { engine.current?.setOptions({ paused, speed, orbits, labels, realScale }); }, [paused, speed, orbits, labels, realScale]);
   useEffect(() => {
-    const selectedDate = new Date(dateTime);
-    if (!Number.isNaN(selectedDate.getTime())) {
-      engine.current?.setDate(selectedDate);
-      setSimulationNow(selectedDate);
-    }
-  }, [dateTime]);
-  useEffect(() => {
     const timer = window.setInterval(() => {
       const currentDate = engine.current?.getDate();
       if (currentDate) setSimulationNow(currentDate);
@@ -90,21 +75,22 @@ export default function Home() {
     flushSync(() => setSelected(name));
   }), []);
   const focus = (name: BodyName | null) => { setSelected(name); setSelectedLandmark(null); engine.current?.focus(name); };
+  const setSimulationDate = (date: Date) => { engine.current?.setDate(date); setSimulationNow(date); };
   const body = selected ? bodies.find((item) => item.name === selected) : null;
 
   return (
     <main className="observatory">
       <div className="space-viewport" ref={host} />
-      {selectedLandmark && <section className="landmark-popover" style={{ left: selectedLandmark.x, top: selectedLandmark.y }} role="dialog" aria-label={`${selectedLandmark.landmark.name} landmark details`}>
+      {selectedLandmark && <dialog open className="landmark-popover" style={{ left: selectedLandmark.x, top: selectedLandmark.y }} aria-label={`${selectedLandmark.landmark.name} landmark details`}>
         <button className="landmark-close" onClick={() => setSelectedLandmark(null)} aria-label="Close landmark details">×</button>
         <span>EARTH LANDMARK</span>
         <h3>{selectedLandmark.landmark.name}</h3>
         <p>{selectedLandmark.landmark.location}</p>
         <p>{selectedLandmark.landmark.description}</p>
         <small>{Math.abs(selectedLandmark.landmark.latitude).toFixed(4)}° {selectedLandmark.landmark.latitude >= 0 ? 'N' : 'S'} · {Math.abs(selectedLandmark.landmark.longitude).toFixed(4)}° {selectedLandmark.landmark.longitude >= 0 ? 'E' : 'W'}</small>
-      </section>}
+      </dialog>}
       <header className="masthead">
-        <Link className="wordmark" href="/" aria-label="Selene's space home"><Orbit size={27} strokeWidth={1.4} /> SELENE'S SPACE<span className="edition"> / 01</span></Link>
+        <Link className="wordmark" href="/" aria-label="Selene's space home"><Orbit size={27} strokeWidth={1.4} /> SELENE&apos;S SPACE<span className="edition"> / 01</span></Link>
         <span className="live-status"><i /> Solar system explorer</span>
       </header>
       <section className="intro">
@@ -139,12 +125,12 @@ export default function Home() {
         <div className="controls-bar">
           <button className="play-button" aria-label={paused ? 'Resume simulation' : 'Pause simulation'} onClick={() => setPaused(!paused)}>{paused ? <Play size={18} fill="currentColor" /> : <Pause size={18} fill="currentColor" />}</button>
           <div className="speed-control"><div><span id="speed-label">TIME SPEED</span><output>{speedStops[speedIndex].label}</output></div><Slider aria-labelledby="speed-label" aria-valuetext={speedStops[speedIndex].label} value={[speedIndex]} min={0} max={speedStops.length - 1} step={1} onValueChange={(value) => setSpeedIndex(Array.isArray(value) ? value[0] : value)} /></div>
-          <label className="date-control"><span>SET SIMULATION DATE</span><input type="datetime-local" value={dateTime} onChange={(event) => setDateTime(event.target.value)} /><output aria-live="polite">NOW · {simulationDateTime(simulationNow)}</output></label>
+          <SimulationTimePicker value={simulationNow} onChange={setSimulationDate} />
           <div className="control-divider" />
           <div className="toggle-control"><label htmlFor="orbit-toggle">Orbits</label><Switch id="orbit-toggle" checked={orbits} onCheckedChange={setOrbits} aria-label="Show orbits" /></div>
           <div className="toggle-control"><label htmlFor="label-toggle">Labels</label><Switch id="label-toggle" checked={labels} onCheckedChange={setLabels} aria-label="Show labels" /></div>
           <div className="toggle-control"><label htmlFor="scale-toggle">True scale</label><Switch id="scale-toggle" checked={realScale} onCheckedChange={setRealScale} aria-label="Use real sizes and distances" /></div>
-          <button className="reset-button" onClick={() => { focus(null); setPaused(false); setSpeedIndex(0); setDateTime(localDateTime(new Date())); setOrbits(true); setLabels(true); setRealScale(false); engine.current?.reset(); }} aria-label="Reset simulation"><RotateCcw size={17} /></button>
+          <button className="reset-button" onClick={() => { const now = new Date(); focus(null); setPaused(false); setSpeedIndex(0); setSimulationNow(now); setOrbits(true); setLabels(true); setRealScale(false); engine.current?.reset(); }} aria-label="Reset simulation"><RotateCcw size={17} /></button>
         </div>
         <div className="footer-meta"><span>DRAG TO ORBIT <b>·</b> SCROLL TO ZOOM <b>·</b> CLICK TO EXPLORE</span><span>WEBGL <i /> LIVE SIMULATION</span></div>
       </footer>

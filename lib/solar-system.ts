@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EclipticGeoMoon, MoonPhase } from 'astronomy-engine';
 import { bodies, type BodyName } from './solar-data';
 import meridianData from './earth-meridian-lengths.json';
 
@@ -8,8 +9,6 @@ export type Landmark = { name: string; location: string; latitude: number; longi
 export type LandmarkSelection = { landmark: Landmark; x: number; y: number } | null;
 type Options = { paused: boolean; speed: number; orbits: boolean; labels: boolean; realScale: boolean };
 const J2000_EPOCH = Date.UTC(2000, 0, 1, 12);
-const KNOWN_NEW_MOON_DAY = (Date.UTC(2000, 0, 6, 18, 14) - J2000_EPOCH) / 86_400_000;
-const SYNODIC_MONTH = 29.530588853;
 const semiMajorAxisAU: Record<BodyName, number> = { Sun: 0, Mercury: 0.387, Venus: 0.723, Earth: 1, Moon: 0.00257, Mars: 1.524, Jupiter: 5.203, Saturn: 9.537, Uranus: 19.191, Neptune: 30.07 };
 const radiusInEarths: Record<BodyName, number> = { Sun: 109.1, Mercury: 0.383, Venus: 0.949, Earth: 1, Moon: 0.273, Mars: 0.532, Jupiter: 11.21, Saturn: 9.45, Uranus: 4.01, Neptune: 3.88 };
 const sceneAU = 14;
@@ -49,8 +48,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   const mobileMedia = window.matchMedia('(max-width: 700px)');
   const updateTouchAction = () => { renderer.domElement.style.touchAction = mobileMedia.matches ? 'pan-y' : 'none'; };
   updateTouchAction();
-  if (mobileMedia.addEventListener) mobileMedia.addEventListener('change', updateTouchAction);
-  else mobileMedia.addListener(updateTouchAction);
+  mobileMedia.addEventListener('change', updateTouchAction);
   controls.enableDamping = true;
   controls.dampingFactor = 0.06;
   controls.minDistance = 1;
@@ -172,10 +170,41 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     return markers;
   }
   let earthGridLine: THREE.LineSegments | null = null;
+  const lunarShadowUniforms = {
+    uEarthPosition: { value: new THREE.Vector3() },
+    uSunPosition: { value: new THREE.Vector3() },
+    uEarthRadius: { value: 1 },
+    uSunRadius: { value: 1 },
+    uEclipseStrength: { value: 0 },
+  };
   const objects = bodies.map((body, index) => {
     const mat = new THREE.MeshStandardMaterial({ color: body.color, roughness: 0.95 });
     if (body.name === 'Earth' || body.name === 'Moon') { mat.map = texture(body.name === 'Earth' ? '/earth.jpg' : '/moon.jpg'); mat.color.set('white'); }
     if (body.name === 'Sun') { mat.emissive.set('#ff9d25'); mat.emissiveIntensity = 2.2; }
+    if (body.name === 'Moon') {
+      mat.onBeforeCompile = (shader) => {
+        Object.assign(shader.uniforms, lunarShadowUniforms);
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', '#include <common>\nvarying vec3 vMoonWorldPosition;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMoonWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>', '#include <common>\nvarying vec3 vMoonWorldPosition;\nuniform vec3 uEarthPosition;\nuniform vec3 uSunPosition;\nuniform float uEarthRadius;\nuniform float uSunRadius;\nuniform float uEclipseStrength;')
+          .replace('#include <opaque_fragment>', `
+            vec3 moonToEarth = uEarthPosition - vMoonWorldPosition;
+            vec3 moonToSun = uSunPosition - vMoonWorldPosition;
+            float earthDistance = length(moonToEarth);
+            float sunDistance = length(moonToSun);
+            float earthAngularRadius = asin(clamp(uEarthRadius / earthDistance, 0.0, 0.9999));
+            float sunAngularRadius = asin(clamp(uSunRadius / sunDistance, 0.0, 0.9999));
+            float centerSeparation = acos(clamp(dot(normalize(moonToEarth), normalize(moonToSun)), -1.0, 1.0));
+            float fullShadowEdge = max(earthAngularRadius - sunAngularRadius, 0.0);
+            float shadowCoverage = (1.0 - smoothstep(fullShadowEdge, earthAngularRadius + sunAngularRadius, centerSeparation)) * uEclipseStrength;
+            outgoingLight = mix(outgoingLight, outgoingLight * vec3(0.18, 0.07, 0.045), shadowCoverage * 0.94);
+            #include <opaque_fragment>
+          `);
+      };
+      mat.customProgramCacheKey = () => 'moon-earth-shadow-v1';
+    }
     // Procedural variation gives the gas giants their cloud bands.
     if (body.name === 'Jupiter' || body.name === 'Saturn' || body.name === 'Mars' || body.name === 'Sun') {
       mat.onBeforeCompile = (shader) => {
@@ -217,9 +246,20 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   const earth = objects.find((item) => item.body.name === 'Earth')!;
   const moon = objects.find((item) => item.body.name === 'Moon')!;
   const moonPath = orbit(moon.body, earth.group);
-  const lunarPhaseAngle = () => ((days - KNOWN_NEW_MOON_DAY) % SYNODIC_MONTH + SYNODIC_MONTH) % SYNODIC_MONTH / SYNODIC_MONTH * Math.PI * 2;
+  let lunarCoordinateDay = Number.NaN;
+  let cachedLunarPhaseAngle = 0;
+  let cachedLunarLatitude = 0;
+  const lunarCoordinates = () => {
+    if (days !== lunarCoordinateDay) {
+      const date = new Date(J2000_EPOCH + days * 86_400_000);
+      cachedLunarPhaseAngle = MoonPhase(date) * degrees;
+      cachedLunarLatitude = EclipticGeoMoon(date).lat * degrees;
+      lunarCoordinateDay = days;
+    }
+    return { phaseAngle: cachedLunarPhaseAngle, latitude: cachedLunarLatitude };
+  };
   const moonPhase = () => {
-    const angle = lunarPhaseAngle();
+    const angle = lunarCoordinates().phaseAngle;
     const illumination = (1 - Math.cos(angle)) / 2;
     const phaseNames = ['New Moon', 'Waxing Crescent', 'First Quarter', 'Waxing Gibbous', 'Full Moon', 'Waning Gibbous', 'Last Quarter', 'Waning Crescent'];
     return { illumination, name: phaseNames[Math.round(angle / (Math.PI / 4)) % phaseNames.length] };
@@ -380,15 +420,27 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
       const angle = body.period ? days / body.period * Math.PI * 2 + phase : 0;
       if (body.distance) group.position.copy(orbitalPosition(body, angle));
       if (body.name === 'Moon') {
-        const phaseAngle = lunarPhaseAngle();
+        const { phaseAngle, latitude } = lunarCoordinates();
         const radius = orbitRadius(body);
-        group.position.copy(earth.group.position).multiplyScalar(-1).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), -phaseAngle).multiplyScalar(radius).add(earth.group.position);
+        group.position.copy(earth.group.position).multiplyScalar(-1).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), -phaseAngle);
+        group.position.multiplyScalar(Math.cos(latitude));
+        group.position.y = Math.sin(latitude);
+        group.position.multiplyScalar(radius).add(earth.group.position);
         mesh.rotation.y = -phaseAngle;
       } else mesh.rotation.y = days / body.rotationPeriod * Math.PI * 2;
       mesh.scale.setScalar(bodyRadius(body));
       ring?.scale.setScalar(bodyRadius(body) / body.radius);
       label.classList.toggle('selected', selected === body.name);
     });
+    lunarShadowUniforms.uEarthPosition.value.copy(earth.group.position);
+    lunarShadowUniforms.uEarthRadius.value = bodyRadius(earth.body);
+    lunarShadowUniforms.uSunRadius.value = bodyRadius(objects[0].body);
+    const { phaseAngle, latitude } = lunarCoordinates();
+    const eclipseSeparation = Math.acos(THREE.MathUtils.clamp(Math.cos(latitude) * Math.cos(phaseAngle - Math.PI), -1, 1));
+    // Physical angular limits as seen from the Moon: the inner value covers a
+    // total eclipse of the lunar disc; the outer value includes the penumbra.
+    const eclipseBlend = THREE.MathUtils.smoothstep(eclipseSeparation / degrees, 0.42, 1.48);
+    lunarShadowUniforms.uEclipseStrength.value = 1 - eclipseBlend;
     const target = objects.find((item) => item.body.name === selected)?.group.position;
     desired.copy(target ?? origin);
     if (transition) {
@@ -421,8 +473,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     reset() { days = (Date.now() - J2000_EPOCH) / 86_400_000; focus(null); },
     dispose() {
       renderer.setAnimationLoop(null); observer.disconnect(); controls.dispose();
-      if (mobileMedia.removeEventListener) mobileMedia.removeEventListener('change', updateTouchAction);
-      else mobileMedia.removeListener(updateTouchAction);
+      mobileMedia.removeEventListener('change', updateTouchAction);
       renderer.domElement.removeEventListener('pointerdown', pointerDown);
       renderer.domElement.removeEventListener('pointermove', pointerMove);
       renderer.domElement.removeEventListener('pointerleave', pointerLeave);
