@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { flushSync } from 'react-dom';
 import { ArrowUpRight, Crosshair, Orbit, Pause, Play, RotateCcw } from 'lucide-react';
@@ -36,7 +36,7 @@ export default function Home() {
   const [selectedLandmark, setSelectedLandmark] = useState<LandmarkSelection>(null);
   const [paused, setPaused] = useState(false);
   const [speedIndex, setSpeedIndex] = useState(0);
-  const [simulationNow, setSimulationNow] = useState(() => new Date());
+  const [simulationNow, setSimulationNow] = useState(() => new Date(0));
   const [moonPhase, setMoonPhase] = useState({ illumination: 0, name: 'New Moon' });
   const [eclipse, setEclipse] = useState<{ type: string; detail: string } | null>(null);
   const [orbits, setOrbits] = useState(true);
@@ -49,7 +49,10 @@ export default function Home() {
   useEffect(() => {
     if (!host.current) return;
     try {
-      engine.current = createSolarSystem(host.current, setSelected, setSelectedLandmark, setError, () => setReady(true));
+      engine.current = createSolarSystem(host.current, setSelected, setSelectedLandmark, setError, () => {
+        setSimulationNow(engine.current?.getDate() ?? new Date());
+        setReady(true);
+      });
     } catch {
       // Renderer startup can fail synchronously; show its error in the interface.
       // oxlint-disable-next-line react/react-compiler
@@ -75,7 +78,7 @@ export default function Home() {
     flushSync(() => setSelected(name));
   }), []);
   const focus = (name: BodyName | null) => { setSelected(name); setSelectedLandmark(null); engine.current?.focus(name); };
-  const setSimulationDate = (date: Date) => { engine.current?.setDate(date); setSimulationNow(date); };
+  const setSimulationDate = useCallback((date: Date) => { engine.current?.setDate(date); setSimulationNow(date); }, []);
   const body = selected ? bodies.find((item) => item.name === selected) : null;
 
   return (
@@ -125,7 +128,9 @@ export default function Home() {
         <div className="controls-bar">
           <button className="play-button" aria-label={paused ? 'Resume simulation' : 'Pause simulation'} onClick={() => setPaused(!paused)}>{paused ? <Play size={18} fill="currentColor" /> : <Pause size={18} fill="currentColor" />}</button>
           <div className="speed-control"><div><span id="speed-label">TIME SPEED</span><output>{speedStops[speedIndex].label}</output></div><Slider aria-labelledby="speed-label" aria-valuetext={speedStops[speedIndex].label} value={[speedIndex]} min={0} max={speedStops.length - 1} step={1} onValueChange={(value) => setSpeedIndex(Array.isArray(value) ? value[0] : value)} /></div>
-          <SimulationTimePicker value={simulationNow} onChange={setSimulationDate} />
+          {ready
+            ? <SimulationTimePicker value={simulationNow} onChange={setSimulationDate} />
+            : <div className="simulation-time-placeholder"><span>SIMULATION TIME</span><strong>Preparing…</strong></div>}
           <div className="control-divider" />
           <div className="toggle-control"><label htmlFor="orbit-toggle">Orbits</label><Switch id="orbit-toggle" checked={orbits} onCheckedChange={setOrbits} aria-label="Show orbits" /></div>
           <div className="toggle-control"><label htmlFor="label-toggle">Labels</label><Switch id="label-toggle" checked={labels} onCheckedChange={setLabels} aria-label="Show labels" /></div>
