@@ -6,7 +6,7 @@
 - [x] Mark on Earth locations of Stonehenge, Great Pyramid of Giza, and Machu Picchu, show info on click
 - [x] Redesign time, can me merge current time and date into one, add eclipses and equinoxes to be visible in calender. easy way to set time now
 - [ ] Add possibility to change month and year
-- [ ] Fix bug for 180 E W longitude
+- [x] Fix bug for 180 E W longitude
 - [ ] Add moon circumference.
 - [ ] Add sizes and masses of celestial bodies
 - [ ] Add moons for other planets

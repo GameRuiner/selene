@@ -368,7 +368,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     const longitudeDelta = Math.abs(longitude - nearestLongitude);
     const showLatitude = Math.abs(nearestLatitude) <= 60 && latitudeDelta <= longitudeDelta;
     const value = showLatitude ? nearestLatitude : nearestLongitude;
-    const suffix = value === 0 ? '' : showLatitude ? value > 0 ? ' N' : ' S' : value > 0 ? ' E' : ' W';
+    const suffix = value === 0 || (!showLatitude && Math.abs(value) === 180) ? '' : showLatitude ? value > 0 ? ' N' : ' S' : value > 0 ? ' E' : ' W';
     gridTooltip.textContent = `${Math.abs(value)}°${suffix} ${showLatitude ? 'latitude' : 'longitude'}`;
     const measurement = document.createElement('span');
     const isLargest = showLatitude && value === 0;
@@ -376,7 +376,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     measurement.className = isLargest ? 'largest' : isSmallest ? 'smallest' : '';
     measurement.textContent = showLatitude
       ? `${isLargest ? 'Largest circumference (equator)' : 'Parallel circumference'} · ${parallelCircumferenceKm(value).toLocaleString(undefined, { maximumFractionDigits: 3 })} km`
-      : `${isSmallest ? 'Smallest measured meridian' : 'Approx. terrain surface loop'} · ${physicalMeridianLengthKm(value).toLocaleString(undefined, { maximumFractionDigits: 0 })} km`;
+      : `${isSmallest ? 'Smallest measured meridian loop' : 'Approx. terrain surface loop'} · ${physicalMeridianLengthKm(value).toLocaleString(undefined, { maximumFractionDigits: 0 })} km`;
     gridTooltip.appendChild(measurement);
     gridTooltip.style.left = `${event.clientX - rect.left + 14}px`;
     gridTooltip.style.top = `${event.clientY - rect.top + 14}px`;
