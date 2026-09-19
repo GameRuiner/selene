@@ -288,6 +288,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   let days = (Date.now() - J2000_EPOCH) / 86_400_000;
   let selected: BodyName | null = null;
   let transition = false;
+  let transitionThreshold = 0.03;
   const offset = new THREE.Vector3();
   const lastTarget = new THREE.Vector3();
   const projected = new THREE.Vector3();
@@ -317,13 +318,17 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   function focus(name: BodyName | null) {
     selected = name;
     const item = objects.find((obj) => obj.body.name === name);
+    const radius = item ? bodyRadius(item.body) : 0;
+    camera.near = item && realScale ? Math.max(radius * 0.08, 0.00001) : 0.1;
+    camera.updateProjectionMatrix();
     const preferredDistance = item
       ? realScale
-        ? Math.max(bodyRadius(item.body) * 8, 0.04)
+        ? Math.max(radius * 8, 0.001)
         : Math.max(item.body.radius * 7, 4)
       : home.length();
     const distance = item ? Math.min(camera.position.distanceTo(controls.target), preferredDistance) : home.length();
-    controls.minDistance = item ? Math.max(bodyRadius(item.body) * 1.8, 0.001) : 5;
+    transitionThreshold = Math.min(0.03, Math.max(distance * 0.005, 0.000001));
+    controls.minDistance = item ? Math.max(radius * 1.8, camera.near * 2.5) : 5;
     offset.set(0.4, 0.6, 1).normalize().multiplyScalar(distance);
     if (!item) offset.copy(home).multiplyScalar(width < 700 ? 1.4 : 1);
     transition = true;
@@ -448,7 +453,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
       controls.target.lerp(desired, factor);
       destination.copy(desired).add(offset);
       camera.position.lerp(destination, factor);
-      if (camera.position.distanceTo(destination) < 0.03) transition = false;
+      if (camera.position.distanceTo(destination) < transitionThreshold) transition = false;
     } else if (target) {
       camera.position.add(delta.copy(desired).sub(lastTarget)); controls.target.copy(desired);
     }
