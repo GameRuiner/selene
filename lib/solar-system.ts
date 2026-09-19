@@ -13,6 +13,23 @@ const semiMajorAxisAU: Partial<Record<BodyName, number>> = { Sun: 0, Mercury: 0.
 const sceneAU = 14;
 const earthRadiiPerAU = 23_455;
 const kilometersPerAU = 149_597_870.7;
+const surfaceTexturePaths: Partial<Record<BodyName, string>> = {
+  Sun: '/textures/sun.jpg',
+  Mercury: '/textures/mercury.jpg',
+  Venus: '/textures/venus.jpg',
+  Earth: '/earth.jpg',
+  Moon: '/moon.jpg',
+  Mars: '/textures/mars.jpg',
+  Jupiter: '/textures/jupiter.jpg',
+  Saturn: '/textures/saturn.jpg',
+  Uranus: '/textures/uranus.jpg',
+  Neptune: '/textures/neptune.jpg',
+  Io: '/textures/io.jpg',
+  Europa: '/textures/europa.jpg',
+  Ganymede: '/textures/ganymede.jpg',
+  Callisto: '/textures/callisto.jpg',
+};
+const missionMosaicBodies = new Set<BodyName>(['Io', 'Europa', 'Ganymede', 'Callisto']);
 const WGS84_SEMI_MAJOR_METERS = 6_378_137;
 const WGS84_INVERSE_FLATTENING = 298.257223563;
 const WGS84_MERIDIONAL_CIRCUMFERENCE_KM = 40_007.863;
@@ -185,8 +202,16 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   };
   const objects = bodies.map((body, index) => {
     const mat = new THREE.MeshStandardMaterial({ color: body.color, roughness: 0.95 });
-    if (body.name === 'Earth' || body.name === 'Moon') { mat.map = texture(body.name === 'Earth' ? '/earth.jpg' : '/moon.jpg'); mat.color.set('white'); }
-    if (body.name === 'Sun') { mat.emissive.set('#ff9d25'); mat.emissiveIntensity = 2.2; }
+    const texturePath = surfaceTexturePaths[body.name];
+    if (texturePath) {
+      mat.map = texture(texturePath);
+      if (!missionMosaicBodies.has(body.name)) mat.color.set('white');
+    }
+    if (body.name === 'Sun') {
+      mat.emissive.set('white');
+      mat.emissiveMap = mat.map;
+      mat.emissiveIntensity = 1.65;
+    }
     if (body.name === 'Moon') {
       mat.onBeforeCompile = (shader) => {
         Object.assign(shader.uniforms, lunarShadowUniforms);
@@ -211,13 +236,15 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
       };
       mat.customProgramCacheKey = () => 'moon-earth-shadow-v1';
     }
-    // Procedural variation gives the gas giants their cloud bands.
-    if (body.name === 'Jupiter' || body.name === 'Saturn' || body.name === 'Mars' || body.name === 'Sun') {
+    if (missionMosaicBodies.has(body.name)) {
       mat.onBeforeCompile = (shader) => {
-        shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vSurface;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvSurface = position;');
-        shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vSurface;').replace('#include <color_fragment>', `#include <color_fragment>\nfloat wave = sin(vSurface.y * ${body.name === 'Jupiter' ? '48.0' : '32.0'} + sin(vSurface.x * 15.0) * 0.9 + sin(vSurface.z * 18.0) * 0.7);\ndiffuseColor.rgb *= 0.8 + wave * 0.18;`);
+        shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `
+          #include <map_fragment>
+          float mosaicCoverage = smoothstep(0.012, 0.05, dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)));
+          diffuseColor.rgb = mix(diffuse, diffuseColor.rgb, mosaicCoverage);
+        `);
       };
-      mat.customProgramCacheKey = () => body.name;
+      mat.customProgramCacheKey = () => `mission-mosaic-${body.name}`;
     }
     materials.push(mat);
     const group = new THREE.Group(); scene.add(group);

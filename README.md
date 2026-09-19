@@ -54,4 +54,4 @@ Lint covers application code and build configuration; generated UI primitives ar
 
 Browsers supporting the proposed WebMCP API can also start a body focus through `start_focusing_solar_body`. This optional integration was not browser-verified because no supported browser context was available.
 
-Surface textures are bundled locally from the [Three.js examples](https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets): [Earth](https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg) and [Moon](https://threejs.org/examples/textures/planets/moon_1024.jpg). Three.js is distributed under the [MIT license](https://github.com/mrdoob/three.js/blob/dev/LICENSE). Gas-giant bands and the Sun glow use shaders. The app does not require remote assets at runtime.
+Surface textures are bundled locally so the app does not require remote assets at runtime. See [ATTRIBUTIONS.md](./ATTRIBUTIONS.md) for their sources, licenses, and coverage limitations.
