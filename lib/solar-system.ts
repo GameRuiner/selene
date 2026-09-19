@@ -9,10 +9,10 @@ export type Landmark = { name: string; location: string; latitude: number; longi
 export type LandmarkSelection = { landmark: Landmark; x: number; y: number } | null;
 type Options = { paused: boolean; speed: number; orbits: boolean; labels: boolean; realScale: boolean };
 const J2000_EPOCH = Date.UTC(2000, 0, 1, 12);
-const semiMajorAxisAU: Record<BodyName, number> = { Sun: 0, Mercury: 0.387, Venus: 0.723, Earth: 1, Moon: 0.00257, Mars: 1.524, Jupiter: 5.203, Saturn: 9.537, Uranus: 19.191, Neptune: 30.07 };
-const radiusInEarths: Record<BodyName, number> = { Sun: 109.1, Mercury: 0.383, Venus: 0.949, Earth: 1, Moon: 0.273, Mars: 0.532, Jupiter: 11.21, Saturn: 9.45, Uranus: 4.01, Neptune: 3.88 };
+const semiMajorAxisAU: Partial<Record<BodyName, number>> = { Sun: 0, Mercury: 0.387, Venus: 0.723, Earth: 1, Mars: 1.524, Jupiter: 5.203, Saturn: 9.537, Uranus: 19.191, Neptune: 30.07 };
 const sceneAU = 14;
 const earthRadiiPerAU = 23_455;
+const kilometersPerAU = 149_597_870.7;
 const WGS84_SEMI_MAJOR_METERS = 6_378_137;
 const WGS84_INVERSE_FLATTENING = 298.257223563;
 const WGS84_MERIDIONAL_CIRCUMFERENCE_KM = 40_007.863;
@@ -86,10 +86,16 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     return result;
   }
   type OrbitalBody = (typeof bodies)[number];
+  type SatelliteBody = Extract<OrbitalBody, { readonly parent: string }>;
+  const isSatellite = (body: OrbitalBody): body is SatelliteBody => 'parent' in body;
   const degrees = Math.PI / 180;
   let realScale = false;
-  const orbitRadius = (body: OrbitalBody) => realScale ? semiMajorAxisAU[body.name] * sceneAU : body.distance;
-  const bodyRadius = (body: OrbitalBody) => realScale ? radiusInEarths[body.name] * sceneAU / earthRadiiPerAU : body.radius;
+  const orbitRadius = (body: OrbitalBody) => realScale
+    ? isSatellite(body)
+      ? body.orbitRadiusKm / kilometersPerAU * sceneAU
+      : (semiMajorAxisAU[body.name] ?? 0) * sceneAU
+    : body.distance;
+  const bodyRadius = (body: OrbitalBody) => realScale ? body.physicalRadiusKm / 6_378.137 * sceneAU / earthRadiiPerAU : body.radius;
   const orbitalPosition = (body: OrbitalBody, meanAnomaly: number, target = new THREE.Vector3()) => {
     // Kepler's equation preserves the faster sweep through periapsis.
     let eccentricAnomaly = meanAnomaly;
@@ -231,7 +237,6 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     label.setAttribute('aria-label', `Focus ${body.name}`);
     label.onclick = () => { focus(body.name); onSelect(body.name); onLandmarkSelect(null); };
     host.appendChild(label);
-    if (body.distance && body.name !== 'Moon') orbit(body);
     let ring: THREE.Mesh | null = null;
     if (body.name === 'Saturn') {
       const ringGeom = new THREE.RingGeometry(2.15, 3.5, 128, 6);
@@ -240,12 +245,17 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
       group.add(ring); geometries.push(ringGeom); materials.push(ringMat);
     }
     // The lunar offset is anchored to the 2000-01-06 18:14 UTC new moon.
-    const phase = body.name === 'Moon' ? 0.9573515073 : body.name === 'Earth' ? 357.529 * degrees : index * 2.399 + 0.6;
+    const phase = body.name === 'Moon' ? 0.9573515073 : isSatellite(body) ? body.phaseDegrees * degrees : body.name === 'Earth' ? 357.529 * degrees : index * 2.399 + 0.6;
     return { body, group, mesh, ring, label, phase };
+  });
+  const objectByName = new Map(objects.map((item) => [item.body.name, item]));
+  const orbitLines = objects.flatMap((item) => {
+    if (!item.body.distance) return [];
+    const parent = isSatellite(item.body) ? objectByName.get(item.body.parent)?.group : paths;
+    return [{ body: item.body, line: orbit(item.body, parent) }];
   });
   const earth = objects.find((item) => item.body.name === 'Earth')!;
   const moon = objects.find((item) => item.body.name === 'Moon')!;
-  const moonPath = orbit(moon.body, earth.group);
   let lunarCoordinateDay = Number.NaN;
   let cachedLunarPhaseAngle = 0;
   let cachedLunarLatitude = 0;
@@ -288,6 +298,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   let days = (Date.now() - J2000_EPOCH) / 86_400_000;
   let selected: BodyName | null = null;
   let transition = false;
+  let transitionStartedAt = 0;
   let transitionThreshold = 0.03;
   const offset = new THREE.Vector3();
   const lastTarget = new THREE.Vector3();
@@ -298,40 +309,33 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   const delta = new THREE.Vector3();
   let width = 1, height = 1;
   function refreshOrbitLines() {
-    paths.traverse((item) => {
-      const body = item.userData.orbitBody as OrbitalBody | undefined;
-      if (!body || !(item instanceof THREE.LineLoop)) return;
-      const attribute = item.geometry.getAttribute('position') as THREE.BufferAttribute;
+    orbitLines.forEach(({ body, line }) => {
+      const attribute = line.geometry.getAttribute('position') as THREE.BufferAttribute;
       for (let i = 0; i < 256; i++) {
         const point = orbitalPosition(body, i / 256 * Math.PI * 2);
         attribute.setXYZ(i, point.x, point.y, point.z);
       }
-      attribute.needsUpdate = true; item.geometry.computeBoundingSphere();
+      attribute.needsUpdate = true; line.geometry.computeBoundingSphere();
     });
-    const moonAttribute = moonPath.geometry.getAttribute('position') as THREE.BufferAttribute;
-    for (let i = 0; i < 256; i++) {
-      const point = orbitalPosition(moon.body, i / 256 * Math.PI * 2);
-      moonAttribute.setXYZ(i, point.x, point.y, point.z);
-    }
-    moonAttribute.needsUpdate = true; moonPath.geometry.computeBoundingSphere();
   }
   function focus(name: BodyName | null) {
     selected = name;
     const item = objects.find((obj) => obj.body.name === name);
     const radius = item ? bodyRadius(item.body) : 0;
-    camera.near = item && realScale ? Math.max(radius * 0.08, 0.00001) : 0.1;
+    camera.near = item && realScale ? Math.max(radius * 0.08, 0.000000001) : 0.1;
     camera.updateProjectionMatrix();
     const preferredDistance = item
       ? realScale
-        ? Math.max(radius * 8, 0.001)
+        ? Math.max(radius * 8, 0.000001)
         : Math.max(item.body.radius * 7, 4)
       : home.length();
     const distance = item ? Math.min(camera.position.distanceTo(controls.target), preferredDistance) : home.length();
-    transitionThreshold = Math.min(0.03, Math.max(distance * 0.005, 0.000001));
+    transitionThreshold = Math.min(0.03, Math.max(distance * 0.005, 0.000000001));
     controls.minDistance = item ? Math.max(radius * 1.8, camera.near * 2.5) : 5;
     offset.set(0.4, 0.6, 1).normalize().multiplyScalar(distance);
     if (!item) offset.copy(home).multiplyScalar(width < 700 ? 1.4 : 1);
     transition = true;
+    transitionStartedAt = performance.now();
     lastTarget.copy(item ? item.group.position : origin);
   }
   const stopTransition = () => { transition = false; };
@@ -421,9 +425,10 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   renderer.setAnimationLoop((now) => {
     const elapsed = Math.min((now - previous) / 1000, 0.05); previous = now;
     if (!document.hidden && !options.paused) days += elapsed * options.speed;
+    const selectedBody = selected ? objectByName.get(selected)?.body : undefined;
+    const selectedSystem = selectedBody && isSatellite(selectedBody) ? selectedBody.parent : selected;
     objects.forEach(({ body, group, mesh, ring, phase, label }) => {
       const angle = body.period ? days / body.period * Math.PI * 2 + phase : 0;
-      if (body.distance) group.position.copy(orbitalPosition(body, angle));
       if (body.name === 'Moon') {
         const { phaseAngle, latitude } = lunarCoordinates();
         const radius = orbitRadius(body);
@@ -432,7 +437,16 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
         group.position.y = Math.sin(latitude);
         group.position.multiplyScalar(radius).add(earth.group.position);
         mesh.rotation.y = -phaseAngle;
-      } else mesh.rotation.y = days / body.rotationPeriod * Math.PI * 2;
+      } else {
+        if (body.distance) {
+          group.position.copy(orbitalPosition(body, angle));
+          if (isSatellite(body)) {
+            const parent = objectByName.get(body.parent);
+            if (parent) group.position.add(parent.group.position);
+          }
+        }
+        mesh.rotation.y = days / body.rotationPeriod * Math.PI * 2;
+      }
       mesh.scale.setScalar(bodyRadius(body));
       ring?.scale.setScalar(bodyRadius(body) / body.radius);
       label.classList.toggle('selected', selected === body.name);
@@ -453,17 +467,26 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
       controls.target.lerp(desired, factor);
       destination.copy(desired).add(offset);
       camera.position.lerp(destination, factor);
-      if (camera.position.distanceTo(destination) < transitionThreshold) transition = false;
+      if (camera.position.distanceTo(destination) < transitionThreshold || now - transitionStartedAt > 1_500) {
+        controls.target.copy(desired);
+        camera.position.copy(destination);
+        transition = false;
+      }
     } else if (target) {
       camera.position.add(delta.copy(desired).sub(lastTarget)); controls.target.copy(desired);
     }
     lastTarget.copy(desired);
-    paths.visible = options.orbits; moonPath.visible = options.orbits;
+    paths.visible = options.orbits;
+    orbitLines.forEach(({ body, line }) => {
+      line.visible = options.orbits && (!isSatellite(body) || selectedSystem === body.parent);
+    });
     controls.update(); glow.quaternion.copy(camera.quaternion); renderer.render(scene, camera);
     if (firstFrame) { firstFrame = false; onReady(); }
     objects.forEach(({ body, group, label }) => {
-      projected.copy(group.position); projected.y += body.radius + 0.55; projected.project(camera);
-      const visible = options.labels && projected.z > -1 && projected.z < 1 && Math.abs(projected.x) < 1 && Math.abs(projected.y) < 1;
+      const labelOffset = realScale ? bodyRadius(body) * 1.8 : 0.55;
+      projected.copy(group.position); projected.y += bodyRadius(body) + labelOffset; projected.project(camera);
+      const inSelectedSystem = !isSatellite(body) || selectedSystem === body.parent;
+      const visible = options.labels && inSelectedSystem && projected.z > -1 && projected.z < 1 && Math.abs(projected.x) < 1 && Math.abs(projected.y) < 1;
       label.hidden = !visible;
       if (visible) label.style.transform = `translate(-50%, -100%) translate(${(projected.x * 0.5 + 0.5) * width}px, ${(-projected.y * 0.5 + 0.5) * height}px)`;
     });

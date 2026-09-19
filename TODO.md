@@ -7,9 +7,9 @@
 - [x] Fix bug for 180 E W longitude
 - [x] Add moon circumference.
 - [x] Add sizes and masses of celestial bodies
-- [ ] Add moons for other planets
+- [x] Add moons for other planets
 - [ ] Add possibility to view from earth
-- [ ] Fix disappearing on a true scale
+- [x] Fix disappearing on a true scale
 - [ ] On eclipses time set, use some time offset to see start of eclipse
 - [x] Add planet size, mass, circumference
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { flushSync } from 'react-dom';
 import { ArrowUpRight, Crosshair, Orbit, Pause, Play, RotateCcw } from 'lucide-react';
@@ -28,6 +28,8 @@ const speedStops = [
   { daysPerSecond: 50, label: '50 DAYS / SEC' },
   { daysPerSecond: 100, label: '100 DAYS / SEC' },
 ] as const;
+
+const primaryBodies = bodies.filter((body) => !('parent' in body));
 
 const superscriptDigits: Record<string, string> = {
   '-': '⁻',
@@ -105,6 +107,7 @@ export default function Home() {
   const focus = (name: BodyName | null) => { setSelected(name); setSelectedLandmark(null); engine.current?.focus(name); };
   const setSimulationDate = useCallback((date: Date) => { engine.current?.setDate(date); setSimulationNow(date); }, []);
   const body = selected ? bodies.find((item) => item.name === selected) : null;
+  const selectedSystem = body && 'parent' in body ? body.parent : body?.name;
 
   return (
     <main className="observatory">
@@ -128,22 +131,27 @@ export default function Home() {
         <button className="earth-shortcut" onClick={() => focus('Earth')}>Explore Earth & Moon <ArrowUpRight size={16} /></button>
       </section>
       <aside className="object-panel" aria-label="Explore celestial bodies">
-        <div className="panel-heading"><span>EXPLORE</span><span>10 OBJECTS</span></div>
+        <div className="panel-heading"><span>EXPLORE</span><span>{bodies.length} OBJECTS</span></div>
         <button className={`object-row overview-row ${selected === null ? 'active' : ''}`} onClick={() => focus(null)} aria-pressed={selected === null}>
           <Orbit size={17} /><span>Whole system</span><span className="row-index">↗</span>
         </button>
-        {bodies.map((item, index) => (
-          <button key={item.name} className={`object-row ${selected === item.name ? 'active' : ''} ${item.name === 'Moon' ? 'moon-row' : ''}`} onClick={() => focus(item.name)} aria-pressed={selected === item.name}>
-            <span className="body-dot" style={{ background: item.color }} /><span>{item.name}</span><span className="row-index">{item.name === 'Moon' ? '↳ EARTH' : String(index > 4 ? index - 1 : index).padStart(2, '0')}</span>
+        {primaryBodies.map((item, index) => <Fragment key={item.name}>
+          <button className={`object-row ${selected === item.name ? 'active' : ''}`} onClick={() => focus(item.name)} aria-pressed={selected === item.name}>
+            <span className="body-dot" style={{ background: item.color }} /><span>{item.name}</span><span className="row-index">{String(index).padStart(2, '0')}</span>
           </button>
-        ))}
+          {selectedSystem === item.name && bodies.filter((candidate) => 'parent' in candidate && candidate.parent === item.name).map((satellite) => (
+            <button key={satellite.name} className={`object-row satellite-row ${selected === satellite.name ? 'active' : ''}`} onClick={() => focus(satellite.name)} aria-pressed={selected === satellite.name}>
+              <span className="body-dot" style={{ background: satellite.color }} /><span>{satellite.name}</span><span className="row-index">↳ {item.name.toUpperCase()}</span>
+            </button>
+          ))}
+        </Fragment>)}
       </aside>
       <aside className="detail-panel" aria-live="polite">
         <p className="eyebrow">{body ? body.kind : 'THE BIG PICTURE'}</p>
         <h2>{body ? body.name : 'A little perspective.'}</h2>
         <p>{body ? body.description : 'Follow an orbit, find your home, or drift a little farther out. Select any world to take a closer look.'}</p>
         {body && <dl className="detail-facts">
-          <div><dt>Orbit around</dt><dd>{body.name === 'Sun' ? '—' : body.name === 'Moon' ? 'Earth' : 'Sun'}</dd></div>
+          <div><dt>Orbit around</dt><dd>{body.name === 'Sun' ? '—' : 'parent' in body ? body.parent : 'Sun'}</dd></div>
           <div><dt>Orbital period</dt><dd>{body.periodLabel}</dd></div>
           <div><dt>Mass</dt><dd>{formatMass(body.massKg)}</dd></div>
           <div><dt>{body.radiusBasis} diameter</dt><dd>{formatKilometers(body.physicalRadiusKm * 2)}</dd></div>

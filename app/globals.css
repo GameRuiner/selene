@@ -33,7 +33,7 @@ h1 { font-weight: 400; font-size: clamp(28px, 3.1vw, 47px); letter-spacing: -0.0
 h1 span { color: #c4d5a4; }
 .intro > p:last-of-type { color: #959caa; font-size: 14px; }
 .earth-shortcut { display: inline-flex; gap: 12px; align-items: center; pointer-events: auto; font-size: 14px; color: #d6e3c0; background: transparent; border: 0; padding: 8px 0; margin-top: 5px; }
-.object-panel { position: absolute; top: 332px; left: 42px; width: 192px; }
+.object-panel { position: absolute; top: 332px; bottom: 178px; left: 42px; width: 198px; padding-right: 6px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #4d5867 transparent; }
 .panel-heading { display: flex; justify-content: space-between; color: #7b8493; font-size: 12px; letter-spacing: 0.1em; margin-bottom: 16px; }
 .panel-heading span:last-child { color: #626c7c; }
 .object-row { width: 100%; display: flex; align-items: center; gap: 12px; background: transparent; border: 1px solid transparent; color: #a2aaba; border-radius: 6px; padding: 9px 10px; font-size: 14px; text-align: left; min-height: 35px; }
@@ -42,8 +42,8 @@ h1 span { color: #c4d5a4; }
 .overview-row { margin-bottom: 10px; }
 .row-index { margin-left: auto; font-family: monospace; font-size: 12px; color: #747e90; }
 .body-dot { width: 8px; height: 8px; border-radius: 50%; margin: 0 4px; flex-shrink: 0; }
-.moon-row { padding-left: 28px; }
-.moon-row .body-dot { width: 5px; height: 5px; }
+.satellite-row { padding-left: 28px; }
+.satellite-row .body-dot { width: 5px; height: 5px; }
 .detail-panel { position: absolute; right: 42px; bottom: 178px; width: 220px; padding-top: 22px; border-top: 1px solid #ffffff21; pointer-events: none; }
 .detail-panel h2 { margin: 0 0 14px; font-weight: 400; font-size: 25px; letter-spacing: -0.035em; }
 .detail-panel > p:not(.eyebrow) { font-size: 14px; color: #a0a9b8; line-height: 1.75; }
@@ -141,7 +141,7 @@ dt { color: #8590a0; } dd { margin: 0; color: #d4dae4; text-align: right; font-v
   .space-viewport canvas { touch-action: pan-y; }
   .masthead { height: 74px; padding: 0 20px; } .live-status { display: none; }
   .intro { top: 101px; left: 20px; } h1 { font-size: 34px; } .intro > p:last-of-type { font-size: 13px; }
-  .object-panel { display: flex; gap: 5px; overflow-x: auto; top: 263px; left: 16px; right: 16px; width: auto; padding: 5px 3px 10px; }
+  .object-panel { display: flex; gap: 5px; overflow-x: auto; overflow-y: hidden; top: 263px; bottom: auto; left: 16px; right: 16px; width: auto; padding: 5px 3px 10px; }
   .panel-heading, .row-index { display: none; } .object-row { white-space: nowrap; width: auto; padding: 8px 12px; background: #0c111be0; flex-shrink: 0; gap: 7px; } .overview-row { margin: 0; }
   .detail-panel { top: 340px; bottom: auto; left: 20px; right: 20px; width: auto; padding-top: 14px; background: #070a107a; }
   .detail-panel .eyebrow { margin-bottom: 8px; } .detail-panel h2 { font-size: 22px; margin-bottom: 6px; }
