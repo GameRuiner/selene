@@ -29,6 +29,31 @@ const speedStops = [
   { daysPerSecond: 100, label: '100 DAYS / SEC' },
 ] as const;
 
+const superscriptDigits: Record<string, string> = {
+  '-': '⁻',
+  '0': '⁰',
+  '1': '¹',
+  '2': '²',
+  '3': '³',
+  '4': '⁴',
+  '5': '⁵',
+  '6': '⁶',
+  '7': '⁷',
+  '8': '⁸',
+  '9': '⁹',
+};
+
+function formatMass(massKg: number) {
+  const exponent = Math.floor(Math.log10(massKg));
+  const coefficient = massKg / 10 ** exponent;
+  const power = String(exponent).split('').map((digit) => superscriptDigits[digit]).join('');
+  return `${new Intl.NumberFormat('en-US', { maximumSignificantDigits: 7 }).format(coefficient)} × 10${power} kg`;
+}
+
+function formatKilometers(kilometers: number) {
+  return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(kilometers)} km`;
+}
+
 export default function Home() {
   const host = useRef<HTMLDivElement>(null);
   const engine = useRef<SolarSystem | null>(null);
@@ -117,7 +142,15 @@ export default function Home() {
         <p className="eyebrow">{body ? body.kind : 'THE BIG PICTURE'}</p>
         <h2>{body ? body.name : 'A little perspective.'}</h2>
         <p>{body ? body.description : 'Follow an orbit, find your home, or drift a little farther out. Select any world to take a closer look.'}</p>
-        {body && <dl><div><dt>Orbit around</dt><dd>{body.name === 'Sun' ? '—' : body.name === 'Moon' ? 'Earth' : 'Sun'}</dd></div><div><dt>Orbital period</dt><dd>{body.periodLabel}</dd></div>{body.name === 'Moon' && <><div><dt>Phase</dt><dd>{moonPhase.name}</dd></div><div><dt>Illumination</dt><dd>{Math.round(moonPhase.illumination * 100)}%</dd></div></>}{body.name === 'Earth' && <div><dt>Landmarks</dt><dd>3 marked sites</dd></div>}</dl>}
+        {body && <dl className="detail-facts">
+          <div><dt>Orbit around</dt><dd>{body.name === 'Sun' ? '—' : body.name === 'Moon' ? 'Earth' : 'Sun'}</dd></div>
+          <div><dt>Orbital period</dt><dd>{body.periodLabel}</dd></div>
+          <div><dt>Mass</dt><dd>{formatMass(body.massKg)}</dd></div>
+          <div><dt>{body.radiusBasis} diameter</dt><dd>{formatKilometers(body.physicalRadiusKm * 2)}</dd></div>
+          <div><dt>{body.radiusBasis} circumference</dt><dd>{formatKilometers(2 * Math.PI * body.physicalRadiusKm)}</dd></div>
+          {body.name === 'Moon' && <><div><dt>Phase</dt><dd>{moonPhase.name}</dd></div><div><dt>Illumination</dt><dd>{Math.round(moonPhase.illumination * 100)}%</dd></div></>}
+          {body.name === 'Earth' && <div><dt>Landmarks</dt><dd>3 marked sites</dd></div>}
+        </dl>}
         {eclipse && (body?.name === 'Earth' || body?.name === 'Moon') && <div className="eclipse-alert"><strong>{eclipse.type}</strong><span>{eclipse.detail}</span></div>}
         {body && <button className="recenter" onClick={() => focus(body.name)}><Crosshair size={15} /> Recenter {body.name}</button>}
         <div className="scale-note"><span>MODEL NOTES</span><p>Sizes and distances are compressed for visibility. Paths use each body’s eccentricity, orbital tilt, and relative period; positions are illustrative.</p></div>
