@@ -3,8 +3,13 @@
 import { memo, useMemo, useState } from 'react';
 import { CalendarDays, RotateCcw } from 'lucide-react';
 import {
+  Body,
+  GeoMoon,
+  GeoVector,
+  KM_PER_AU,
   NextGlobalSolarEclipse,
   NextLunarEclipse,
+  Search,
   SearchGlobalSolarEclipse,
   SearchLunarEclipse,
   Seasons,
@@ -16,6 +21,7 @@ type AstronomyEvent = {
   date: Date;
   kind: 'equinox' | 'solstice' | 'solar-eclipse' | 'lunar-eclipse';
   label: string;
+  approximateStart?: boolean;
 };
 
 type SimulationTimePickerProps = {
@@ -24,6 +30,10 @@ type SimulationTimePickerProps = {
 };
 
 const DAY_MS = 86_400_000;
+const MINUTE_MS = 60_000;
+const SUN_RADIUS_KM = 695_700;
+const MOON_MEAN_RADIUS_KM = 1_737.4;
+const EARTH_MEAN_RADIUS_KM = 6_371;
 
 function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -33,6 +43,34 @@ function sameLocalDay(first: Date, second: Date) {
   return first.getFullYear() === second.getFullYear()
     && first.getMonth() === second.getMonth()
     && first.getDate() === second.getDate();
+}
+
+function solarEclipseStart(eclipse: ReturnType<typeof SearchGlobalSolarEclipse>) {
+  // Find first contact anywhere on Earth: the instant the Moon's penumbra
+  // first touches the mean Earth sphere. Search expects a rising zero crossing.
+  const contact = Search((time) => {
+    const sun = GeoVector(Body.Sun, time, true);
+    const moon = GeoMoon(time);
+    const targetX = -moon.x;
+    const targetY = -moon.y;
+    const targetZ = -moon.z;
+    const directionX = moon.x - sun.x;
+    const directionY = moon.y - sun.y;
+    const directionZ = moon.z - sun.z;
+    const directionSquared = directionX ** 2 + directionY ** 2 + directionZ ** 2;
+    const projection = (directionX * targetX + directionY * targetY + directionZ * targetZ) / directionSquared;
+    const shadowDistance = KM_PER_AU * Math.hypot(
+      projection * directionX - targetX,
+      projection * directionY - targetY,
+      projection * directionZ - targetZ,
+    );
+    const penumbraRadius = -SUN_RADIUS_KM + (1 + projection) * (SUN_RADIUS_KM + MOON_MEAN_RADIUS_KM);
+    return penumbraRadius + EARTH_MEAN_RADIUS_KM - shadowDistance;
+  }, eclipse.peak.AddDays(-0.3), eclipse.peak);
+
+  return contact
+    ? { date: contact.date, approximate: false }
+    : { date: new Date(eclipse.peak.date.getTime() - 150 * MINUTE_MS), approximate: true };
 }
 
 function eventsForYear(year: number): AstronomyEvent[] {
@@ -47,15 +85,17 @@ function eventsForYear(year: number): AstronomyEvent[] {
   const searchEnd = new Date(Date.UTC(year + 1, 0, 1) + DAY_MS);
   let solar = SearchGlobalSolarEclipse(searchStart);
   while (solar.peak.date < searchEnd) {
-    if (solar.peak.date.getFullYear() === year) {
-      events.push({ date: solar.peak.date, kind: 'solar-eclipse', label: `${capitalize(solar.kind)} solar eclipse` });
+    const start = solarEclipseStart(solar);
+    if (start.date.getFullYear() === year) {
+      events.push({ date: start.date, kind: 'solar-eclipse', label: `${capitalize(solar.kind)} solar eclipse`, approximateStart: start.approximate });
     }
     solar = NextGlobalSolarEclipse(solar.peak);
   }
   let lunar = SearchLunarEclipse(searchStart);
   while (lunar.peak.date < searchEnd) {
-    if (lunar.peak.date.getFullYear() === year) {
-      events.push({ date: lunar.peak.date, kind: 'lunar-eclipse', label: `${capitalize(lunar.kind)} lunar eclipse` });
+    const start = new Date(lunar.peak.date.getTime() - lunar.sd_penum * MINUTE_MS);
+    if (start.getFullYear() === year) {
+      events.push({ date: start, kind: 'lunar-eclipse', label: `${capitalize(lunar.kind)} lunar eclipse` });
     }
     lunar = NextLunarEclipse(lunar.peak);
   }
@@ -103,7 +143,7 @@ const CalendarEditor = memo(function CalendarEditor({ initialValue, onChange }: 
 
   return (
     <>
-      <div className="time-popover-heading"><span>SIMULATION DATE & TIME</span><button onClick={setNow}><RotateCcw size={13} /> Set to now</button></div>
+      <div className="time-popover-heading"><span>DATE & TIME</span><button onClick={setNow}><RotateCcw size={13} /> Set to now</button></div>
       <Calendar
         mode="single"
         month={month}
@@ -145,7 +185,13 @@ const CalendarEditor = memo(function CalendarEditor({ initialValue, onChange }: 
         <span><i className="solar-eclipse" /> Solar eclipse (global)</span><span><i className="lunar-eclipse" /> Lunar eclipse</span>
       </div>
       {selectedEvents.length > 0 && <div className="selected-date-events" aria-live="polite">
-        {selectedEvents.map((event) => <button key={`${event.kind}-${event.date.toISOString()}`} onClick={() => { setPickerDate(event.date); onChange(event.date); }} aria-label={`Set simulation to ${event.label}`}><i className={event.kind} /><span>{event.label}</span><time>{new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(event.date)}</time></button>)}
+        {selectedEvents.map((event) => {
+          const isEclipse = event.kind === 'solar-eclipse' || event.kind === 'lunar-eclipse';
+          const action = isEclipse ? `the ${event.approximateStart ? 'approximate ' : ''}start of ` : '';
+          const timePrefix = event.approximateStart ? 'Approx. start ' : isEclipse ? 'Starts ' : '';
+
+          return <button key={`${event.kind}-${event.date.toISOString()}`} onClick={() => { setPickerDate(event.date); onChange(event.date); }} aria-label={`Set simulation to ${action}${event.label}`}><i className={event.kind} /><span>{event.label}</span><time>{timePrefix}{new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(event.date)}</time></button>;
+        })}
       </div>}
       <label className="simulation-time-input"><span>TIME</span><input type="time" step="1" value={timeInputValue(pickerDate)} onChange={(event) => selectTime(event.target.value)} /></label>
     </>
@@ -164,9 +210,9 @@ export function SimulationTimePicker({ value, onChange }: SimulationTimePickerPr
       setOpen(nextOpen);
       if (nextOpen) setEditorValue(value);
     }}>
-      <PopoverTrigger className="simulation-time-trigger" aria-label={`Simulation time: ${dateLabel}, ${timeLabel}`}>
+      <PopoverTrigger className="simulation-time-trigger" aria-label={`Time: ${dateLabel}, ${timeLabel}`}>
         <CalendarDays size={17} />
-        <span><small>SIMULATION TIME</small><strong>{dateLabel}</strong></span>
+        <span><small>TIME</small><strong>{dateLabel}</strong></span>
         <time dateTime={value.toISOString()}>{timeLabel}</time>
       </PopoverTrigger>
       <PopoverContent className="simulation-time-popover" align="center" side="top" sideOffset={10}>

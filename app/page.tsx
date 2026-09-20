@@ -171,7 +171,7 @@ export default function Home() {
           <div className="speed-control"><div><span id="speed-label">TIME SPEED</span><output>{speedStops[speedIndex].label}</output></div><Slider aria-labelledby="speed-label" aria-valuetext={speedStops[speedIndex].label} value={[speedIndex]} min={0} max={speedStops.length - 1} step={1} onValueChange={(value) => setSpeedIndex(Array.isArray(value) ? value[0] : value)} /></div>
           {ready
             ? <SimulationTimePicker value={simulationNow} onChange={setSimulationDate} />
-            : <div className="simulation-time-placeholder"><span>SIMULATION TIME</span><strong>Preparing…</strong></div>}
+            : <div className="simulation-time-placeholder"><span>TIME</span><strong>Preparing…</strong></div>}
           <div className="control-divider" />
           <div className="toggle-control"><label htmlFor="orbit-toggle">Orbits</label><Switch id="orbit-toggle" checked={orbits} onCheckedChange={setOrbits} aria-label="Show orbits" /></div>
           <div className="toggle-control"><label htmlFor="label-toggle">Labels</label><Switch id="label-toggle" checked={labels} onCheckedChange={setLabels} aria-label="Show labels" /></div>

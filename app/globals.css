@@ -75,7 +75,7 @@ dt { color: #8590a0; } dd { margin: 0; color: #d4dae4; text-align: right; font-v
 .simulation-time-trigger > svg { grid-row: 1 / 3; align-self: center; color: #9fac8a; }
 .simulation-time-trigger > span { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .simulation-time-trigger small { color: #8792a3; font-size: 10px; font-weight: 400; letter-spacing: 0.1em; }
-.simulation-time-trigger strong { font-size: 12px; font-weight: 500; letter-spacing: 0.01em; }
+.simulation-time-trigger strong { flex-shrink: 0; white-space: nowrap; font-size: 12px; font-weight: 500; letter-spacing: 0.01em; }
 .simulation-time-trigger time { font-size: 12px; color: #aeb8c7; font-variant-numeric: tabular-nums; }
 .simulation-time-placeholder { display: grid; gap: 3px; min-width: 196px; padding: 7px 10px; border: 1px solid #ffffff12; border-radius: 7px; background: #ffffff03; }
 .simulation-time-placeholder span { color: #8792a3; font-size: 10px; letter-spacing: 0.1em; }
