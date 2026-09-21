@@ -51,7 +51,8 @@ h1 span { color: #c4d5a4; }
 dl { font-size: 13px; margin: 20px 0; }
 dl div { display: flex; justify-content: space-between; gap: 8px; padding: 9px 0; border-bottom: 1px solid #ffffff0c; }
 dt { color: #8590a0; } dd { margin: 0; color: #d4dae4; text-align: right; font-variant-numeric: tabular-nums; }
-.recenter { display: flex; align-items: center; gap: 8px; padding: 8px 0; background: none; border: 0; font-size: 13px; color: #c4d5a4; pointer-events: auto; }
+.recenter, .sky-view-button { display: flex; align-items: center; gap: 8px; padding: 8px 0; background: none; border: 0; font-size: 13px; color: #c4d5a4; pointer-events: auto; }
+.sky-view-button { margin-top: 3px; color: #d8e5c2; }
 .scale-note { padding-top: 21px; margin-top: 18px; border-top: 1px solid #ffffff12; }
 .scale-note span { font-size: 12px; letter-spacing: 0.12em; color: #788392; }
 .scale-note p { font-size: 12px; color: #7f8a9c; line-height: 1.7; margin-bottom: 0; }
@@ -108,8 +109,10 @@ dt { color: #8590a0; } dd { margin: 0; color: #d4dae4; text-align: right; font-v
 .calendar-legend .solar-eclipse, .selected-date-events .solar-eclipse { background: #ef8a55; }
 .calendar-legend .lunar-eclipse, .selected-date-events .lunar-eclipse { background: #a996e8; }
 .selected-date-events { display: grid; gap: 6px; padding: 8px 5px 2px; }
-.selected-date-events button { display: flex; align-items: center; gap: 7px; width: 100%; padding: 5px; border: 0; border-radius: 5px; background: #ffffff05; color: #d9dfd0; font-size: 11px; text-align: left; }
+.selected-date-event { display: grid; grid-template-columns: 1fr; align-items: stretch; overflow: hidden; border-radius: 5px; background: #ffffff05; }
+.selected-date-events button { display: flex; align-items: center; gap: 7px; border: 0; color: #d9dfd0; font-size: 11px; }
 .selected-date-events button:hover { background: #ffffff0c; }
+.event-time-button { min-width: 0; padding: 6px; background: transparent; text-align: left; }
 .selected-date-events time { margin-left: auto; color: #929cad; font-variant-numeric: tabular-nums; }
 .simulation-time-input { display: flex; align-items: center; justify-content: space-between; padding: 8px 5px 1px; color: #8994a4; font-size: 11px; letter-spacing: 0.1em; }
 .simulation-time-input input { width: 126px; padding: 5px 7px; border: 1px solid #ffffff1f; border-radius: 5px; background: #ffffff08; color: #dce4d2; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; color-scheme: dark; }
@@ -121,14 +124,40 @@ dt { color: #8590a0; } dd { margin: 0; color: #d4dae4; text-align: right; font-v
 .footer-meta i { margin: 0 7px; }
 .planet-label { position: absolute; top: 0; left: 0; padding: 6px 9px; border: 0; border-radius: 4px; background: #080c1270; color: #b4becf; font-size: 12px; letter-spacing: 0.04em; }
 .planet-label:hover, .planet-label.selected { color: #e2edcf; background: #263021b3; }
+.planet-label.below-horizon { opacity: 0.58; }
+.compass-label { position: absolute; z-index: 6; top: 0; left: 0; min-width: 24px; padding: 3px 5px; border: 1px solid #aeb7bd4d; border-radius: 3px; background: #0b1016d9; color: #c9d0d4; font: 10px/1 monospace; letter-spacing: 0.08em; text-align: center; pointer-events: none; }
 .earth-grid-tooltip { position: absolute; z-index: 5; display: grid; gap: 5px; padding: 7px 9px; border: 1px solid #c4d5a438; border-radius: 4px; background: #080c12e6; color: #dce8c8; font-size: 12px; line-height: 1; letter-spacing: 0.04em; pointer-events: none; white-space: nowrap; }
 .earth-grid-tooltip span { color: #9ba992; font-size: 11px; letter-spacing: 0.01em; }
 .earth-grid-tooltip span.largest { color: #f2c96d; }
 .earth-grid-tooltip span.smallest { color: #74dec0; }
+.eclipse-observer-panel { position: absolute; z-index: 7; top: 112px; right: 42px; width: 310px; padding: 16px; border: 1px solid #c4d5a43d; border-radius: 10px; background: #0b1118f2; color: #dce2d5; box-shadow: 0 18px 54px #000a; backdrop-filter: blur(14px); }
+.observer-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.observer-heading > div { display: grid; gap: 5px; }
+.observer-heading span { color: #99a28f; font-size: 10px; letter-spacing: 0.14em; }
+.observer-heading strong { font-size: 16px; font-weight: 500; }
+.observer-heading > button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 5px; background: #ffffff08; color: #909aa8; }
+.observer-time { margin: 10px 0 15px; color: #8e98a7; font-size: 11px; line-height: 1.45; }
+.observer-place { display: grid; gap: 7px; }
+.observer-place > span { display: flex; align-items: center; gap: 6px; color: #aab3a3; font-size: 11px; }
+.observer-place select, .observer-target select, .observer-coordinates input { width: 100%; height: 34px; border: 1px solid #ffffff1f; border-radius: 6px; background: #151c26; color: #e1e6dd; font: inherit; font-size: 12px; color-scheme: dark; }
+.observer-place select, .observer-target select { padding: 0 9px; }
+.observer-target { display: grid; gap: 5px; margin-top: 10px; color: #7f8998; font-size: 9px; letter-spacing: 0.1em; }
+.observer-target > div { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 7px; }
+.observer-target button { display: flex; align-items: center; justify-content: center; gap: 5px; height: 34px; padding: 0 10px; border: 1px solid #c4d5a433; border-radius: 6px; background: #c4d5a414; color: #dce8c8; font: inherit; font-size: 10px; letter-spacing: 0.02em; }
+.observer-target button[aria-label^="Zoom"] { width: 34px; padding: 0; }
+.eclipse-observer-active .detail-panel { display: none; }
+.observer-coordinates { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.observer-coordinates label { display: grid; gap: 5px; color: #7f8998; font-size: 9px; letter-spacing: 0.1em; }
+.observer-coordinates input { padding: 0 8px; font-variant-numeric: tabular-nums; }
+.observer-coordinates > button { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 7px; height: 33px; border: 1px solid #c4d5a433; border-radius: 6px; background: #c4d5a414; color: #dce8c8; font-size: 11px; }
+.observer-status { display: flex; align-items: flex-start; gap: 8px; margin: 13px 0 9px; padding-top: 11px; border-top: 1px solid #ffffff12; color: #aab3c1; font-size: 11px; line-height: 1.45; }
+.observer-status i { width: 6px; height: 6px; flex: 0 0 6px; margin-top: 5px; border-radius: 50%; background: #d18d6d; }
+.observer-status.visible i { background: #88c99c; box-shadow: 0 0 6px #88c99c99; }
+.eclipse-observer-panel > small { color: #707b8b; font-size: 10px; }
 .scene-message { position: absolute; top: 44%; left: 50%; transform: translate(-50%, -50%); max-width: 420px; padding: 24px; border: 1px solid #ffffff30; background: #111722; border-radius: 10px; line-height: 1.7; }
 @media (max-width: 1100px) {
   .masthead { padding: 0 26px; } .intro, .object-panel { left: 26px; }
-  .detail-panel { right: 26px; width: 180px; } .bottom-area { left: 26px; right: 26px; } .object-panel { width: 190px; }
+  .detail-panel { right: 26px; width: 180px; } .bottom-area { left: 26px; right: 26px; } .object-panel { width: 190px; } .eclipse-observer-panel { right: 26px; }
 }
 @media (max-height: 860px) and (min-width: 701px) {
   .observatory { min-height: 700px; } .intro { top: 116px; } .object-panel { top: 290px; } .object-row { padding-top: 6px; padding-bottom: 6px; min-height: 30px; }
@@ -147,6 +176,9 @@ dt { color: #8590a0; } dd { margin: 0; color: #d4dae4; text-align: right; font-v
   .detail-panel { top: 340px; bottom: auto; left: 20px; right: 20px; width: auto; padding-top: 14px; background: #070a107a; }
   .detail-panel .eyebrow { margin-bottom: 8px; } .detail-panel h2 { font-size: 22px; margin-bottom: 6px; }
   .detail-panel > p:not(.eyebrow) { font-size: 13px; margin: 5px 0; line-height: 1.5; }
+  .eclipse-observer-panel { top: 570px; left: 16px; right: 16px; width: auto; }
+  .eclipse-observer-active .intro, .eclipse-observer-active .object-panel, .eclipse-observer-active .detail-panel { display: none; }
+  .eclipse-observer-active .eclipse-observer-panel { top: 80px; }
   .scale-note { display: none; } .detail-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; margin: 8px 0; } .detail-facts div { min-width: 0; padding: 5px 0; } .detail-facts dd { font-size: 12px; } .recenter { display: none; }
   .bottom-area { bottom: 20px; left: 16px; right: 16px; }
   .controls-bar { flex-wrap: wrap; gap: 18px; padding: 15px 18px; margin-bottom: 16px; justify-content: center; }

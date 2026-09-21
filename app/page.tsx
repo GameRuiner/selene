@@ -3,9 +3,11 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { flushSync } from 'react-dom';
-import { ArrowUpRight, Crosshair, Orbit, Pause, Play, RotateCcw } from 'lucide-react';
+import { ArrowUpRight, Crosshair, Orbit, Pause, Play, RotateCcw, Telescope } from 'lucide-react';
+import { Body as AstronomyBody, Equator, Horizon, Observer } from 'astronomy-engine';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
+import { EclipseObserverPanel, type ObserverLocation, type SkyTarget } from '@/components/eclipse-observer-panel';
 import { SimulationTimePicker } from '@/components/simulation-time-picker';
 import { bodies, type BodyName } from '@/lib/solar-data';
 import { createSolarSystem, type LandmarkSelection, type SolarSystem } from '@/lib/solar-system';
@@ -56,6 +58,28 @@ function formatKilometers(kilometers: number) {
   return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(kilometers)} km`;
 }
 
+const defaultObserver: ObserverLocation = { label: 'Warsaw', latitude: 52.2297, longitude: 21.0122 };
+const astronomyTargets: Record<SkyTarget, AstronomyBody> = {
+  Sun: AstronomyBody.Sun,
+  Moon: AstronomyBody.Moon,
+  Mercury: AstronomyBody.Mercury,
+  Venus: AstronomyBody.Venus,
+  Mars: AstronomyBody.Mars,
+  Jupiter: AstronomyBody.Jupiter,
+  Saturn: AstronomyBody.Saturn,
+  Uranus: AstronomyBody.Uranus,
+  Neptune: AstronomyBody.Neptune,
+};
+
+function skyObservation(date: Date, location: ObserverLocation, target: SkyTarget) {
+  const observer = new Observer(location.latitude, location.longitude, 0);
+  const equator = Equator(astronomyTargets[target], date, observer, true, true);
+  const altitude = Horizon(date, observer, equator.ra, equator.dec, 'normal').altitude;
+  return altitude > 0
+    ? { visible: true, status: `${target} is ${altitude.toFixed(1)}° above the horizon.` }
+    : { visible: false, status: `${target} is ${Math.abs(altitude).toFixed(1)}° below the horizon.` };
+}
+
 export default function Home() {
   const host = useRef<HTMLDivElement>(null);
   const engine = useRef<SolarSystem | null>(null);
@@ -69,6 +93,10 @@ export default function Home() {
   const [orbits, setOrbits] = useState(true);
   const [labels, setLabels] = useState(true);
   const [realScale, setRealScale] = useState(false);
+  const [observerActive, setObserverActive] = useState(false);
+  const [observerFreeLook, setObserverFreeLook] = useState(false);
+  const [observerLocation, setObserverLocation] = useState<ObserverLocation>(defaultObserver);
+  const [observerTarget, setObserverTarget] = useState<SkyTarget>('Sun');
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
   const speed = speedStops[speedIndex].daysPerSecond;
@@ -79,7 +107,7 @@ export default function Home() {
       engine.current = createSolarSystem(host.current, setSelected, setSelectedLandmark, setError, () => {
         setSimulationNow(engine.current?.getDate() ?? new Date());
         setReady(true);
-      });
+      }, () => setObserverFreeLook(true));
     } catch {
       // Renderer startup can fail synchronously; show its error in the interface.
       // oxlint-disable-next-line react/react-compiler
@@ -102,15 +130,51 @@ export default function Home() {
     if (!engine.current) throw new Error('The solar system is not ready.');
     engine.current.focus(name);
     setSelectedLandmark(null);
+    setObserverActive(false);
+    setObserverFreeLook(false);
     flushSync(() => setSelected(name));
   }), []);
-  const focus = (name: BodyName | null) => { setSelected(name); setSelectedLandmark(null); engine.current?.focus(name); };
-  const setSimulationDate = useCallback((date: Date) => { engine.current?.setDate(date); setSimulationNow(date); }, []);
+  const stopSkyView = useCallback(() => {
+    engine.current?.setEarthObserver(null);
+    setObserverActive(false);
+    setObserverFreeLook(false);
+  }, []);
+  const focus = (name: BodyName | null) => {
+    stopSkyView();
+    setSelected(name);
+    setSelectedLandmark(null);
+    engine.current?.focus(name);
+  };
+  const setSimulationDate = (date: Date) => {
+    engine.current?.setDate(date);
+    setSimulationNow(date);
+  };
+  const applyObserverLocation = (location: ObserverLocation, target: SkyTarget = observerTarget) => {
+    setObserverLocation(location);
+    setObserverFreeLook(false);
+    engine.current?.setEarthObserver({ latitude: location.latitude, longitude: location.longitude, target });
+  };
+  const changeObserverTarget = (target: SkyTarget) => {
+    setObserverTarget(target);
+    setObserverFreeLook(false);
+    engine.current?.setEarthObserver({ latitude: observerLocation.latitude, longitude: observerLocation.longitude, target });
+  };
+  const viewSkyFromEarth = () => {
+    const target: SkyTarget = 'Sun';
+    setObserverActive(true);
+    setObserverFreeLook(false);
+    setObserverTarget(target);
+    setSelected('Earth');
+    setSelectedLandmark(null);
+    setRealScale(true);
+    engine.current?.setEarthObserver({ latitude: observerLocation.latitude, longitude: observerLocation.longitude, target });
+  };
   const body = selected ? bodies.find((item) => item.name === selected) : null;
   const selectedSystem = body && 'parent' in body ? body.parent : body?.name;
+  const displayedObserverStatus = skyObservation(simulationNow, observerLocation, observerTarget);
 
   return (
-    <main className="observatory">
+    <main className={`observatory ${observerActive ? 'eclipse-observer-active' : ''}`}>
       <div className="space-viewport" ref={host} />
       {selectedLandmark && <dialog open className="landmark-popover" style={{ left: selectedLandmark.x, top: selectedLandmark.y }} aria-label={`${selectedLandmark.landmark.name} landmark details`}>
         <button className="landmark-close" onClick={() => setSelectedLandmark(null)} aria-label="Close landmark details">×</button>
@@ -120,6 +184,20 @@ export default function Home() {
         <p>{selectedLandmark.landmark.description}</p>
         <small>{Math.abs(selectedLandmark.landmark.latitude).toFixed(4)}° {selectedLandmark.landmark.latitude >= 0 ? 'N' : 'S'} · {Math.abs(selectedLandmark.landmark.longitude).toFixed(4)}° {selectedLandmark.landmark.longitude >= 0 ? 'E' : 'W'}</small>
       </dialog>}
+      {observerActive && <EclipseObserverPanel
+        currentDate={simulationNow}
+        location={observerLocation}
+        target={observerTarget}
+        freeLook={observerFreeLook}
+        status={displayedObserverStatus.status}
+        visible={displayedObserverStatus.visible}
+        onApply={(location) => applyObserverLocation(location)}
+        onTargetChange={changeObserverTarget}
+        onCenterTarget={() => changeObserverTarget(observerTarget)}
+        onZoomIn={() => engine.current?.zoomEarthObserver(-8)}
+        onZoomOut={() => engine.current?.zoomEarthObserver(8)}
+        onClose={() => { stopSkyView(); engine.current?.focus('Earth'); }}
+      />}
       <header className="masthead">
         <Link className="wordmark" href="/" aria-label="Selene's space home"><Orbit size={27} strokeWidth={1.4} /> SELENE&apos;S SPACE<span className="edition"> / 01</span></Link>
         <span className="live-status"><i /> Solar system explorer</span>
@@ -160,6 +238,7 @@ export default function Home() {
           {body.name === 'Earth' && <div><dt>Landmarks</dt><dd>3 marked sites</dd></div>}
         </dl>}
         {eclipse && (body?.name === 'Earth' || body?.name === 'Moon') && <div className="eclipse-alert"><strong>{eclipse.type}</strong><span>{eclipse.detail}</span></div>}
+        {body?.name === 'Earth' && !observerActive && <button className="sky-view-button" onClick={viewSkyFromEarth}><Telescope size={15} /> View sky from Earth</button>}
         {body && <button className="recenter" onClick={() => focus(body.name)}><Crosshair size={15} /> Recenter {body.name}</button>}
         {!body && <div className="scale-note"><span>MODEL NOTES</span><p>Sizes and distances are compressed for visibility. Paths use each body’s eccentricity, orbital tilt, and relative period; positions are illustrative.</p></div>}
       </aside>
@@ -175,7 +254,7 @@ export default function Home() {
           <div className="control-divider" />
           <div className="toggle-control"><label htmlFor="orbit-toggle">Orbits</label><Switch id="orbit-toggle" checked={orbits} onCheckedChange={setOrbits} aria-label="Show orbits" /></div>
           <div className="toggle-control"><label htmlFor="label-toggle">Labels</label><Switch id="label-toggle" checked={labels} onCheckedChange={setLabels} aria-label="Show labels" /></div>
-          <div className="toggle-control"><label htmlFor="scale-toggle">True scale</label><Switch id="scale-toggle" checked={realScale} onCheckedChange={setRealScale} aria-label="Use real sizes and distances" /></div>
+          <div className="toggle-control"><label htmlFor="scale-toggle">True scale</label><Switch id="scale-toggle" checked={realScale} disabled={observerActive} onCheckedChange={setRealScale} aria-label="Use real sizes and distances" /></div>
           <button className="reset-button" onClick={() => { const now = new Date(); focus(null); setPaused(false); setSpeedIndex(0); setSimulationNow(now); setOrbits(true); setLabels(true); setRealScale(false); engine.current?.reset(); }} aria-label="Reset simulation"><RotateCcw size={17} /></button>
         </div>
         <div className="footer-meta"><span>DRAG TO ORBIT <b>·</b> SCROLL TO ZOOM <b>·</b> CLICK TO EXPLORE</span><span>WEBGL <i /> LIVE SIMULATION</span></div>

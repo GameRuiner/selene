@@ -87,7 +87,13 @@ function eventsForYear(year: number): AstronomyEvent[] {
   while (solar.peak.date < searchEnd) {
     const start = solarEclipseStart(solar);
     if (start.date.getFullYear() === year) {
-      events.push({ date: start.date, kind: 'solar-eclipse', label: `${capitalize(solar.kind)} solar eclipse`, approximateStart: start.approximate });
+      const label = `${capitalize(solar.kind)} solar eclipse`;
+      events.push({
+        date: start.date,
+        kind: 'solar-eclipse',
+        label,
+        approximateStart: start.approximate,
+      });
     }
     solar = NextGlobalSolarEclipse(solar.peak);
   }
@@ -95,7 +101,8 @@ function eventsForYear(year: number): AstronomyEvent[] {
   while (lunar.peak.date < searchEnd) {
     const start = new Date(lunar.peak.date.getTime() - lunar.sd_penum * MINUTE_MS);
     if (start.getFullYear() === year) {
-      events.push({ date: start, kind: 'lunar-eclipse', label: `${capitalize(lunar.kind)} lunar eclipse` });
+      const label = `${capitalize(lunar.kind)} lunar eclipse`;
+      events.push({ date: start, kind: 'lunar-eclipse', label });
     }
     lunar = NextLunarEclipse(lunar.peak);
   }
@@ -190,7 +197,9 @@ const CalendarEditor = memo(function CalendarEditor({ initialValue, onChange }: 
           const action = isEclipse ? `the ${event.approximateStart ? 'approximate ' : ''}start of ` : '';
           const timePrefix = event.approximateStart ? 'Approx. start ' : isEclipse ? 'Starts ' : '';
 
-          return <button key={`${event.kind}-${event.date.toISOString()}`} onClick={() => { setPickerDate(event.date); onChange(event.date); }} aria-label={`Set simulation to ${action}${event.label}`}><i className={event.kind} /><span>{event.label}</span><time>{timePrefix}{new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(event.date)}</time></button>;
+          return <div className="selected-date-event" key={`${event.kind}-${event.date.toISOString()}`}>
+            <button className="event-time-button" onClick={() => { setPickerDate(event.date); onChange(event.date); }} aria-label={`Set simulation to ${action}${event.label}`}><i className={event.kind} /><span>{event.label}</span><time>{timePrefix}{new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(event.date)}</time></button>
+          </div>;
         })}
       </div>}
       <label className="simulation-time-input"><span>TIME</span><input type="time" step="1" value={timeInputValue(pickerDate)} onChange={(event) => selectTime(event.target.value)} /></label>
