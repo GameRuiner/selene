@@ -45,14 +45,44 @@ Vitest is development-only and runs in Node. It must not add a production runtim
 - User camera input cancels active transitions. Observer dragging switches to free look once for each transition.
 - Remove every listener with the same target and function reference used to add it. Stop animation before disposing resources, controls, listeners, renderer, or DOM nodes.
 
-## Active refactor destination
+## Architecture
 
-The structural migration described in `migration.md` is the active destination. This map describes intended responsibilities; entries marked as future extraction destinations are not claims that those modules already exist.
-
-- `lib/astronomy/time.ts`, `events.ts`, `observer.ts`, and `moon.ts`: extracted pure date, event, observer, and lunar calculations. These modules are present.
-- `lib/solar-system/types.ts`, `orbit-math.ts`, `camera-controller.ts`, `resources.ts`, `earth-overlays.ts`, and `celestial-mapper.ts`: shared engine types, deterministic math, camera planning, GPU resource ownership, Earth overlays, and astronomy-to-scene mapping. These modules are present; camera transition ownership and view orchestration remain in the facade.
-- Future engine extraction destinations: `body-scene.ts`, `earth-observer-view.ts`, and `input-controller.ts`.
-- `lib/solar-system.ts`: retain as the sole public engine facade and lifecycle/frame orchestrator.
-- `components/solar-system/`: application-specific object browser, body details, and simulation controls. These components are present.
+- `app/page.tsx`: React composition, UI state, engine lifecycle, polling, and WebMCP adapter.
+- `app/globals.css`: application and responsive styling.
+- `components/solar-system/`: application-specific explorer panels and controls.
+- `components/simulation-time-picker.tsx`: date/time calendar UI.
+- `components/eclipse-observer-panel.tsx`: Earth sky observer controls.
+- `components/ui/`: generated UI primitives. Treat these files as generated and do not edit or reformat them.
+- `lib/solar-data.ts`: static celestial-body catalog and body type helpers.
+- `lib/astronomy/`: date conversion, event calculations, lunar state, and observer calculations.
 - `lib/formatters.ts`: shared body fact formatting.
-- `tests/`: deterministic characterization tests for astronomy, orbital and focus calculations, the body catalog, and WebMCP behavior.
+- `lib/solar-system.ts`: sole public engine facade, lifecycle, frame sequencing, and cleanup.
+- `lib/solar-system/types.ts`: public and shared engine types.
+- `lib/solar-system/orbit-math.ts`: deterministic scene scale and orbital calculations.
+- `lib/solar-system/resources.ts`: GPU resource registration and disposal.
+- `lib/solar-system/earth-overlays.ts`: Earth grid, landmarks, and circumference readings.
+- `lib/solar-system/celestial-mapper.ts`: astronomy-engine coordinates mapped into scene coordinates.
+- `lib/solar-system/body-scene.ts`: body meshes, materials, orbit lines, shaders, labels, and per-frame transforms.
+- `lib/solar-system/camera-controller.ts`: normal focus transitions and selected-body following.
+- `lib/solar-system/earth-observer-view.ts`: observer camera, horizon, compass, sky markers, and eclipse visuals.
+- `lib/solar-system/input-controller.ts`: pointer, wheel, raycast, and context-loss handling.
+- `lib/explorer-tool.ts`: optional WebMCP registration.
+- `scripts/calculate_meridian_lengths.py`: offline ETOPO/WGS84 meridian-data generator.
+- `public/`: local textures and static assets.
+- `tests/`: deterministic characterization and unit tests.
+
+## Commands
+
+```sh
+npm install
+npm run dev
+npm test
+npx tsc --noEmit
+npm run lint
+npm run build
+npm run preview
+```
+
+`npm run preview` serves the static files from `dist/client/`. Vitest runs in Node and is development-only; it does not add a production runtime or deployment requirement.
+
+Lint application code, custom components, tests, and configuration. Do not add generated files under `components/ui/` or `hooks/use-mobile.ts` to lint-driven cleanup work.

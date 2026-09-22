@@ -41,8 +41,8 @@ This is an illustrative model: body sizes and orbital distances are compressed i
 - `components/solar-system/`: object browser, body details, and simulation controls
 - `components/simulation-time-picker.tsx`: calendar and time picker
 - `components/eclipse-observer-panel.tsx`: Earth observer controls
-- `lib/solar-system.ts`: public Three.js engine facade, scene, animation, camera, and cleanup
-- `lib/solar-system/`: orbit math, focus planning, and shared engine types
+- `lib/solar-system.ts`: public Three.js engine facade, lifecycle, frame sequencing, and cleanup
+- `lib/solar-system/`: orbit math, body scene, camera and observer controllers, input binding, overlays, and resource ownership
 - `lib/astronomy/`: date conversion, event calculations, Moon state, and observer calculations
 - `lib/solar-data.ts`: body definitions and catalog helpers
 - `lib/formatters.ts`: mass and distance formatting
@@ -51,6 +51,8 @@ This is an illustrative model: body sizes and orbital distances are compressed i
 
 ## Checks
 
+Vitest runs in Node as a development-only dependency; it adds no production runtime or deployment requirement.
+
 ```sh
 npm test
 npx tsc --noEmit
@@ -58,7 +60,7 @@ npm run lint
 npm run build
 ```
 
-Vitest runs in Node as a development-only dependency and adds no production runtime requirement. Lint covers application code, custom components, tests, and configuration; generated UI primitives are retained unchanged.
+Lint covers application code, custom components, tests, and configuration; generated UI primitives are retained unchanged.
 
 Browsers supporting the proposed WebMCP API can also start a body focus through `start_focusing_solar_body`. This optional integration was not browser-verified because no supported browser context was available.
 

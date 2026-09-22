@@ -7,6 +7,7 @@ describe('orbit math', () => {
     expect(orbitRadius(findBody('Earth'), false)).toBe(14);
     expect(orbitRadius(findBody('Earth'), true)).toBe(14);
     expect(orbitRadius(findBody('Moon'), false)).toBe(2.3);
+    expect(orbitRadius(findBody('Moon'), false)).toBeGreaterThan(2 * bodyRadius(findBody('Earth'), false));
     expect(orbitRadius(findBody('Moon'), true)).toBeCloseTo(0.03596, 4);
     expect(orbitRadius(findBody('Eris'), false)).toBe(91);
     expect(orbitRadius(findBody('Eris'), true)).toBeCloseTo(67.9 * 14, 8);
