@@ -69,7 +69,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   renderer.toneMappingExposure = 1.25;
   host.appendChild(renderer.domElement);
   renderer.domElement.setAttribute('aria-label', 'Three-dimensional solar system. Use the object list to select a world, or drag and scroll on this view.');
-  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 1500);
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 2500);
   const controls = new OrbitControls(camera, renderer.domElement);
   // Keep page scrolling on phones until the user enters the dedicated sky-look mode.
   const mobileMedia = window.matchMedia('(max-width: 700px)');
@@ -162,7 +162,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   const orbitRadius = (body: OrbitalBody) => realScale
     ? isSatellite(body)
       ? body.orbitRadiusKm / kilometersPerAU * sceneAU
-      : (semiMajorAxisAU[body.name] ?? 0) * sceneAU
+      : ('semiMajorAxisAU' in body ? body.semiMajorAxisAU : semiMajorAxisAU[body.name] ?? 0) * sceneAU
     : body.distance;
   const bodyRadius = (body: OrbitalBody) => realScale ? body.physicalRadiusKm / 6_378.137 * sceneAU / earthRadiiPerAU : body.radius;
   const orbitalPosition = (body: OrbitalBody, meanAnomaly: number, target = new THREE.Vector3()) => {
@@ -173,6 +173,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     const x = radius * (Math.cos(eccentricAnomaly) - body.eccentricity);
     const z = radius * Math.sqrt(1 - body.eccentricity ** 2) * Math.sin(eccentricAnomaly);
     target.set(x, 0, z).applyAxisAngle(new THREE.Vector3(0, 1, 0), body.periapsis * degrees).applyAxisAngle(new THREE.Vector3(1, 0, 0), body.inclination * degrees);
+    if ('ascendingNode' in body) target.applyAxisAngle(new THREE.Vector3(0, 1, 0), body.ascendingNode * degrees);
     return target;
   };
   function orbit(body: OrbitalBody, parent: THREE.Object3D = paths) {
@@ -878,7 +879,11 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     const selectedBody = selected ? objectByName.get(selected)?.body : undefined;
     const selectedSystem = selectedBody && isSatellite(selectedBody) ? selectedBody.parent : selected;
     objects.forEach(({ body, group, mesh, ring, phase, label }) => {
-      const angle = body.period ? days / body.period * Math.PI * 2 + phase : 0;
+      const angle = body.period
+        ? 'orbitalEpochJulianDay' in body
+          ? (days + 2451545 - body.orbitalEpochJulianDay) / body.period * Math.PI * 2 + body.meanAnomalyDegrees * degrees
+          : days / body.period * Math.PI * 2 + phase
+        : 0;
       if (body.name === 'Moon') {
         const { phaseAngle, latitude } = lunarCoordinates();
         if (realScale) {
@@ -956,7 +961,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
       if (visible) element.style.transform = `translate(-50%, -100%) translate(${(compassProjected.x * 0.5 + 0.5) * width}px, ${(-compassProjected.y * 0.5 + 0.5) * height - 7}px)`;
     });
     objects.forEach(({ body, group, label }) => {
-      const labelOffset = realScale ? bodyRadius(body) * 1.8 : 0.55;
+      const labelOffset = realScale ? bodyRadius(body) * 0.25 : 0.55;
       const observerMarker = observerMarkers.get(body.name);
       projected.copy(observerMarker?.visible ? observerMarker.position : group.position);
       if (!earthObserver) projected.y += bodyRadius(body) + labelOffset;
@@ -984,7 +989,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
           camera.near = Math.max(bodyRadius(earth.body) * 0.0005, 0.000000001);
           camera.updateProjectionMatrix();
         } else {
-          focus(null);
+          focus(selected);
         }
       }
       options = next;

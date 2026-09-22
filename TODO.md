@@ -13,7 +13,7 @@
 - [x] On eclipses time set, use some time offset to see start of eclipse
 - [x] Add planet size, mass, circumference
 - [ ] Add possibility to move time backwards
-- [ ] Add Pluto, Eris and Ceres and other dwarf planets
+- [x] Add Pluto, Eris and Ceres and other dwarf planets
 - [ ] Refactor code
 
 what is lunar eclipse

@@ -36,6 +36,7 @@ h1 span { color: #c4d5a4; }
 .object-panel { position: absolute; top: 332px; bottom: 178px; left: 42px; width: 198px; padding-right: 6px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #4d5867 transparent; }
 .panel-heading { display: flex; justify-content: space-between; color: #7b8493; font-size: 12px; letter-spacing: 0.1em; margin-bottom: 16px; }
 .panel-heading span:last-child { color: #626c7c; }
+.object-group-heading { margin: 17px 10px 6px; color: #7b8493; font-size: 10px; letter-spacing: 0.12em; }
 .object-row { width: 100%; display: flex; align-items: center; gap: 12px; background: transparent; border: 1px solid transparent; color: #a2aaba; border-radius: 6px; padding: 9px 10px; font-size: 14px; text-align: left; min-height: 35px; }
 .object-row:hover { background: #ffffff08; color: white; }
 .object-row.active { background: #c4d5a40c; border-color: #c4d5a42a; color: #e1e9d4; }
@@ -45,11 +46,11 @@ h1 span { color: #c4d5a4; }
 .satellite-row { gap: 8px; padding-left: 18px; padding-right: 6px; }
 .satellite-row .body-dot { width: 5px; height: 5px; }
 .satellite-row .row-index { flex-shrink: 0; white-space: nowrap; font-size: 9px; letter-spacing: -0.02em; }
-.detail-panel { position: absolute; right: 42px; bottom: 178px; width: 220px; padding-top: 22px; border-top: 1px solid #ffffff21; pointer-events: none; }
-.detail-panel h2 { margin: 0 0 14px; font-weight: 400; font-size: 25px; letter-spacing: -0.035em; }
-.detail-panel > p:not(.eyebrow) { font-size: 14px; color: #a0a9b8; line-height: 1.75; }
-dl { font-size: 13px; margin: 20px 0; }
-dl div { display: flex; justify-content: space-between; gap: 8px; padding: 9px 0; border-bottom: 1px solid #ffffff0c; }
+.detail-panel { position: absolute; right: 42px; bottom: 178px; width: 220px; max-height: calc(100% - 270px); overflow-y: auto; padding-top: 15px; border-top: 1px solid #ffffff21; scrollbar-width: thin; scrollbar-color: #4d5867 transparent; }
+.detail-panel h2 { margin: 0 0 8px; font-weight: 400; font-size: 25px; letter-spacing: -0.035em; }
+.detail-panel > p:not(.eyebrow) { font-size: 14px; color: #a0a9b8; line-height: 1.55; }
+dl { font-size: 13px; margin: 12px 0; }
+dl div { display: flex; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px solid #ffffff0c; }
 dt { color: #8590a0; } dd { margin: 0; color: #d4dae4; text-align: right; font-variant-numeric: tabular-nums; }
 .recenter, .sky-view-button { display: flex; align-items: center; gap: 8px; padding: 8px 0; background: none; border: 0; font-size: 13px; color: #c4d5a4; pointer-events: auto; }
 .sky-view-button { margin-top: 3px; color: #d8e5c2; }
@@ -172,8 +173,8 @@ dt { color: #8590a0; } dd { margin: 0; color: #d4dae4; text-align: right; font-v
   .masthead { height: 74px; padding: 0 20px; } .live-status { display: none; }
   .intro { top: 101px; left: 20px; } h1 { font-size: 34px; } .intro > p:last-of-type { font-size: 13px; }
   .object-panel { display: flex; gap: 5px; overflow-x: auto; overflow-y: hidden; top: 263px; bottom: auto; left: 16px; right: 16px; width: auto; padding: 5px 3px 10px; }
-  .panel-heading, .row-index { display: none; } .object-row { white-space: nowrap; width: auto; padding: 8px 12px; background: #0c111be0; flex-shrink: 0; gap: 7px; } .overview-row { margin: 0; }
-  .detail-panel { top: 340px; bottom: auto; left: 20px; right: 20px; width: auto; padding-top: 14px; background: #070a107a; }
+  .panel-heading, .row-index { display: none; } .object-group-heading { display: flex; align-items: center; flex: 0 0 auto; margin: 0 4px 0 12px; white-space: nowrap; } .object-row { white-space: nowrap; width: auto; padding: 8px 12px; background: #0c111be0; flex-shrink: 0; gap: 7px; } .overview-row { margin: 0; }
+  .detail-panel { top: 340px; bottom: auto; left: 20px; right: 20px; width: auto; max-height: none; overflow: visible; padding: 14px; border: 1px solid #ffffff21; border-radius: 8px; background: #080c15f2; }
   .detail-panel .eyebrow { margin-bottom: 8px; } .detail-panel h2 { font-size: 22px; margin-bottom: 6px; }
   .detail-panel > p:not(.eyebrow) { font-size: 13px; margin: 5px 0; line-height: 1.5; }
   .eclipse-observer-panel { top: 570px; left: 16px; right: 16px; width: auto; }

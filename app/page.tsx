@@ -31,7 +31,9 @@ const speedStops = [
   { daysPerSecond: 100, label: '100 DAYS / SEC' },
 ] as const;
 
-const primaryBodies = bodies.filter((body) => !('parent' in body));
+const planetsAndSun = bodies.filter((body) => !('parent' in body) && body.kind !== 'DWARF PLANET');
+const dwarfPlanets = bodies.filter((body) => body.kind === 'DWARF PLANET');
+const primaryBodies = [...planetsAndSun, ...dwarfPlanets];
 
 const superscriptDigits: Record<string, string> = {
   '-': '⁻',
@@ -214,6 +216,7 @@ export default function Home() {
           <Orbit size={17} /><span>Whole system</span><span className="row-index">↗</span>
         </button>
         {primaryBodies.map((item, index) => <Fragment key={item.name}>
+          {index === planetsAndSun.length && <div className="object-group-heading">DWARF PLANETS</div>}
           <button className={`object-row ${selected === item.name ? 'active' : ''}`} onClick={() => focus(item.name)} aria-pressed={selected === item.name}>
             <span className="body-dot" style={{ background: item.color }} /><span>{item.name}</span><span className="row-index">{String(index).padStart(2, '0')}</span>
           </button>
