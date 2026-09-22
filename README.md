@@ -33,24 +33,32 @@ For a future Cloudflare Pages deployment, use build command `npm run build` and 
 - Select Earth for a close view of Earth and its orbiting Moon.
 - Pause, adjust simulated days per second, toggle labels and orbit paths, or reset the simulation.
 
-This is an illustrative model: body sizes and orbital distances are compressed independently, orbits are circular and coplanar, and initial positions are arbitrary. Orbital periods are approximate relative Earth-day periods. Axial rotation is stylized except for the tidally locked Moon. It is not an ephemeris or a gravitational simulation.
+This is an illustrative model: body sizes and orbital distances are compressed independently in the default view. Paths use eccentricity, orbital inclination, and relative period; orbital positions are simplified, with exact astronomy-engine positions used for selected Earth-observer views. Axial rotation is stylized except for the tidally locked Moon. It is not a full ephemeris or gravitational simulation.
 
 ## Project structure
 
-- `app/page.tsx`: explorer interface and state
-- `lib/solar-system.ts`: renderer, scene, animation, camera, and cleanup
-- `lib/solar-data.ts`: body definitions and orbital periods
+- `app/page.tsx`: explorer composition, React state, engine lifecycle, and WebMCP adapter
+- `components/solar-system/`: object browser, body details, and simulation controls
+- `components/simulation-time-picker.tsx`: calendar and time picker
+- `components/eclipse-observer-panel.tsx`: Earth observer controls
+- `lib/solar-system.ts`: public Three.js engine facade, scene, animation, camera, and cleanup
+- `lib/solar-system/`: orbit math, focus planning, and shared engine types
+- `lib/astronomy/`: date conversion, event calculations, Moon state, and observer calculations
+- `lib/solar-data.ts`: body definitions and catalog helpers
+- `lib/formatters.ts`: mass and distance formatting
+- `tests/`: deterministic astronomy, camera, catalog, and WebMCP characterization tests
 - `app/globals.css`: responsive interface
 
 ## Checks
 
 ```sh
+npm test
 npx tsc --noEmit
 npm run lint
 npm run build
 ```
 
-Lint covers application code and build configuration; generated UI primitives are retained unchanged.
+Vitest runs in Node as a development-only dependency and adds no production runtime requirement. Lint covers application code, custom components, tests, and configuration; generated UI primitives are retained unchanged.
 
 Browsers supporting the proposed WebMCP API can also start a body focus through `start_focusing_solar_body`. This optional integration was not browser-verified because no supported browser context was available.
 

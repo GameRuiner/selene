@@ -10,7 +10,9 @@
     "build": "vinext build",
     "start": "vite preview --outDir dist/client --host 127.0.0.1",
     "preview": "vite preview --outDir dist/client --host 127.0.0.1",
-    "lint": "oxlint app lib vite.config.ts next.config.ts",
+    "lint": "oxlint app lib components/*.tsx components/solar-system tests vitest.config.ts vite.config.ts next.config.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "format": "oxfmt"
   },
   "dependencies": {
@@ -53,6 +55,7 @@
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
     "vite": "8.0.13",
+    "vitest": "^3.2.7",
     "wrangler": "4.92.0"
   },
   "type": "module"

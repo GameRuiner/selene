@@ -15,5 +15,10 @@
 - [ ] Add possibility to move time backwards
 - [x] Add Pluto, Eris and Ceres and other dwarf planets
 - [ ] Refactor code
+- [ ] Add moon shadow on Earth
+- [ ] Add gravitational field visualization
+- [ ] Add day and night from view from Earth 
+- [ ] Add Apophis 
+- [ ] Check planes of orbit for all planets and moons
 
 what is lunar eclipse

@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { Crosshair, MapPin, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { SKY_TARGETS, type ObserverLocation, type SkyTarget } from '@/lib/astronomy/observer';
 
-export type ObserverLocation = { latitude: number; longitude: number; label: string };
-export type SkyTarget = 'Sun' | 'Moon' | 'Mercury' | 'Venus' | 'Mars' | 'Jupiter' | 'Saturn' | 'Uranus' | 'Neptune';
+export type { ObserverLocation, SkyTarget } from '@/lib/astronomy/observer';
 
 type EclipseObserverPanelProps = {
   currentDate: Date;
@@ -33,8 +33,6 @@ function sameCoordinates(first: ObserverLocation, second: ObserverLocation) {
   return Math.abs(first.latitude - second.latitude) < 0.0001 && Math.abs(first.longitude - second.longitude) < 0.0001;
 }
 
-const skyTargets: SkyTarget[] = ['Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune'];
-
 export function EclipseObserverPanel({ currentDate, location, target, freeLook, status, visible, onApply, onTargetChange, onCenterTarget, onZoomIn, onZoomOut, onClose }: EclipseObserverPanelProps) {
   const presets = placePresets;
   const [latitude, setLatitude] = useState(String(location.latitude));
@@ -42,6 +40,7 @@ export function EclipseObserverPanel({ currentDate, location, target, freeLook, 
   const selectedPreset = presets.findIndex((preset) => sameCoordinates(preset, location));
 
   useEffect(() => {
+    // oxlint-disable-next-line react/react-compiler
     setLatitude(String(Number(location.latitude.toFixed(5))));
     setLongitude(String(Number(location.longitude.toFixed(5))));
   }, [location.latitude, location.longitude]);
@@ -77,7 +76,7 @@ export function EclipseObserverPanel({ currentDate, location, target, freeLook, 
     </select></label>
     <label className="observer-target"><span>LOOK AT</span><div><select value={freeLook ? 'free' : target} onChange={(change) => onTargetChange(change.target.value as SkyTarget)}>
       {freeLook && <option value="free" disabled>Free camera</option>}
-      {skyTargets.map((body) => <option key={body} value={body}>{body}</option>)}
+      {SKY_TARGETS.map((body) => <option key={body} value={body}>{body}</option>)}
     </select><button type="button" onClick={onCenterTarget}><Crosshair size={12} /> Center</button><button type="button" onClick={onZoomOut} aria-label="Zoom sky map out" title="Zoom out"><ZoomOut size={13} /></button><button type="button" onClick={onZoomIn} aria-label="Zoom sky map in" title="Zoom in"><ZoomIn size={13} /></button></div></label>
     <div className="observer-coordinates">
       <label><span>LATITUDE</span><input type="number" min="-90" max="90" step="0.0001" value={latitude} onChange={(change) => setLatitude(change.target.value)} /></label>

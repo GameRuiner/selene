@@ -42,3 +42,15 @@ export const bodies = [
 ] as const;
 
 export type BodyName = (typeof bodies)[number]['name'];
+export type SolarBody = (typeof bodies)[number];
+export type SatelliteBody = Extract<SolarBody, { readonly parent: string }>;
+
+export function isSatellite(body: SolarBody): body is SatelliteBody {
+  return 'parent' in body;
+}
+
+export function findBody(name: BodyName): SolarBody {
+  const body = bodies.find((candidate) => candidate.name === name);
+  if (!body) throw new Error(`Unknown solar body: ${name}`);
+  return body;
+}

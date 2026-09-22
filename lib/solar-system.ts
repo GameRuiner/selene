@@ -1,19 +1,20 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { Body as AstronomyBody, EclipticGeoMoon, GeoMoon, GeoVector, MoonPhase, Observer, ObserverVector } from 'astronomy-engine';
-import { bodies, type BodyName } from './solar-data';
-import meridianData from './earth-meridian-lengths.json';
+import { Body as AstronomyBody } from 'astronomy-engine';
+import { bodies, type BodyName, type SolarBody, isSatellite } from './solar-data';
+import { dateToSimulationDays, simulationDaysToDate } from './astronomy/time';
+import { lunarCoordinates as calculateLunarCoordinates, moonPhaseFromAngle, classifySceneEclipse, lunarEclipseStrength } from './astronomy/moon';
+import { bodyRadius as calculateBodyRadius, orbitRadius as calculateOrbitRadius, orbitalPosition as calculateOrbitalPosition } from './solar-system/orbit-math';
+import { calculateFocusCameraPlan } from './solar-system/camera-controller';
+import { astronomyBodyForTarget, SKY_TARGETS, type SkyTarget } from './astronomy/observer';
+import { createResourceRegistry, loadSrgbTexture } from './solar-system/resources';
+import { createEarthGrid, createEarthLandmarks, readEarthGridAt } from './solar-system/earth-overlays';
+import { createCelestialMapper } from './solar-system/celestial-mapper';
 
-export type SolarSystem = ReturnType<typeof createSolarSystem>;
-export type Landmark = { name: string; location: string; latitude: number; longitude: number; description: string };
-export type LandmarkSelection = { landmark: Landmark; x: number; y: number } | null;
-export type EarthObserver = { latitude: number; longitude: number; target: BodyName };
-type Options = { paused: boolean; speed: number; orbits: boolean; labels: boolean; realScale: boolean };
-const J2000_EPOCH = Date.UTC(2000, 0, 1, 12);
-const semiMajorAxisAU: Partial<Record<BodyName, number>> = { Sun: 0, Mercury: 0.387, Venus: 0.723, Earth: 1, Mars: 1.524, Jupiter: 5.203, Saturn: 9.537, Uranus: 19.191, Neptune: 30.07 };
+import type { SolarSystem, Landmark, LandmarkSelection, EarthObserver, SolarSystemOptions } from './solar-system/types';
+export type { SolarSystem, Landmark, LandmarkSelection, EarthObserver, SolarSystemOptions } from './solar-system/types';
+type Options = SolarSystemOptions;
 const sceneAU = 14;
-const earthRadiiPerAU = 23_455;
-const kilometersPerAU = 149_597_870.7;
 const surfaceTexturePaths: Partial<Record<BodyName, string>> = {
   Sun: '/textures/sun.jpg',
   Mercury: '/textures/mercury.jpg',
@@ -30,37 +31,8 @@ const surfaceTexturePaths: Partial<Record<BodyName, string>> = {
   Ganymede: '/textures/ganymede.jpg',
   Callisto: '/textures/callisto.jpg',
 };
-const observerAstronomyBodies: Partial<Record<BodyName, AstronomyBody>> = {
-  Mercury: AstronomyBody.Mercury,
-  Venus: AstronomyBody.Venus,
-  Mars: AstronomyBody.Mars,
-  Jupiter: AstronomyBody.Jupiter,
-  Saturn: AstronomyBody.Saturn,
-  Uranus: AstronomyBody.Uranus,
-  Neptune: AstronomyBody.Neptune,
-};
 const missionMosaicBodies = new Set<BodyName>(['Io', 'Europa', 'Ganymede', 'Callisto']);
-const WGS84_SEMI_MAJOR_METERS = 6_378_137;
-const WGS84_INVERSE_FLATTENING = 298.257223563;
-const WGS84_MERIDIONAL_CIRCUMFERENCE_KM = 40_007.863;
-const terrainMeridianLengthKm = new Map(
-  meridianData.loops.map((loop) => [loop.orientationDegrees, loop.lengthKm]),
-);
-
-function parallelCircumferenceKm(latitudeDegrees: number) {
-  const flattening = 1 / WGS84_INVERSE_FLATTENING;
-  const eccentricitySquared = 2 * flattening - flattening ** 2;
-  const latitude = latitudeDegrees * Math.PI / 180;
-  const primeVerticalRadius = WGS84_SEMI_MAJOR_METERS / Math.sqrt(1 - eccentricitySquared * Math.sin(latitude) ** 2);
-  return 2 * Math.PI * primeVerticalRadius * Math.cos(latitude) / 1_000;
-}
-
-function physicalMeridianLengthKm(longitudeDegrees: number) {
-  const orientation = THREE.MathUtils.euclideanModulo(longitudeDegrees, 180);
-  return terrainMeridianLengthKm.get(orientation) ?? WGS84_MERIDIONAL_CIRCUMFERENCE_KM;
-}
-
-export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyName | null) => void, onLandmarkSelect: (selection: LandmarkSelection) => void, onError: (message: string) => void, onReady: () => void, onObserverFreeLook: () => void) {
+export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyName | null) => void, onLandmarkSelect: (selection: LandmarkSelection) => void, onError: (message: string) => void, onReady: () => void, onObserverFreeLook: () => void): SolarSystem {
   const scene = new THREE.Scene();
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -86,11 +58,9 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   camera.position.copy(home);
   scene.add(new THREE.AmbientLight(0xb4c9e8, 0.32));
   scene.add(new THREE.PointLight(0xfff1d9, 3.2, 0, 0));
-  const geometries: THREE.BufferGeometry[] = [];
-  const materials: THREE.Material[] = [];
-  const textures: THREE.Texture[] = [];
+  const resources = createResourceRegistry();
   const geometry = new THREE.SphereGeometry(1, 64, 40);
-  geometries.push(geometry);
+  resources.geometry(geometry);
   const paths = new THREE.Group();
   scene.add(paths);
   const horizonGeometry = new THREE.SphereGeometry(1, 96, 48);
@@ -132,8 +102,8 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   horizonLine.frustumCulled = false;
   horizonLine.renderOrder = 10;
   scene.add(horizonLine);
-  geometries.push(horizonGeometry);
-  materials.push(horizonMaterial);
+  resources.geometry(horizonGeometry);
+  resources.material(horizonMaterial);
   const positions = new Float32Array(2400 * 3);
   for (let i = 0; i < 2400; i++) {
     const theta = Math.random() * Math.PI * 2;
@@ -145,106 +115,27 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   const starMaterial = new THREE.PointsMaterial({ color: 0xb8c7e2, size: 0.55, transparent: true, opacity: 0.65, sizeAttenuation: true, depthWrite: false });
   scene.add(new THREE.Points(starGeometry, starMaterial));
-  geometries.push(starGeometry); materials.push(starMaterial);
+  resources.geometry(starGeometry); resources.material(starMaterial);
   const loader = new THREE.TextureLoader();
   function texture(url: string) {
-    const result = loader.load(url, undefined, undefined, () => onError('A surface texture could not load. Reload the page to try again.'));
-    result.colorSpace = THREE.SRGBColorSpace;
-    result.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
-    textures.push(result);
-    return result;
+    return loadSrgbTexture(loader, renderer, resources, url, () => onError('A surface texture could not load. Reload the page to try again.'));
   }
-  type OrbitalBody = (typeof bodies)[number];
-  type SatelliteBody = Extract<OrbitalBody, { readonly parent: string }>;
-  const isSatellite = (body: OrbitalBody): body is SatelliteBody => 'parent' in body;
+  type OrbitalBody = SolarBody;
   const degrees = Math.PI / 180;
   let realScale = false;
-  const orbitRadius = (body: OrbitalBody) => realScale
-    ? isSatellite(body)
-      ? body.orbitRadiusKm / kilometersPerAU * sceneAU
-      : ('semiMajorAxisAU' in body ? body.semiMajorAxisAU : semiMajorAxisAU[body.name] ?? 0) * sceneAU
-    : body.distance;
-  const bodyRadius = (body: OrbitalBody) => realScale ? body.physicalRadiusKm / 6_378.137 * sceneAU / earthRadiiPerAU : body.radius;
-  const orbitalPosition = (body: OrbitalBody, meanAnomaly: number, target = new THREE.Vector3()) => {
-    // Kepler's equation preserves the faster sweep through periapsis.
-    let eccentricAnomaly = meanAnomaly;
-    for (let i = 0; i < 6; i++) eccentricAnomaly -= (eccentricAnomaly - body.eccentricity * Math.sin(eccentricAnomaly) - meanAnomaly) / (1 - body.eccentricity * Math.cos(eccentricAnomaly));
-    const radius = orbitRadius(body);
-    const x = radius * (Math.cos(eccentricAnomaly) - body.eccentricity);
-    const z = radius * Math.sqrt(1 - body.eccentricity ** 2) * Math.sin(eccentricAnomaly);
-    target.set(x, 0, z).applyAxisAngle(new THREE.Vector3(0, 1, 0), body.periapsis * degrees).applyAxisAngle(new THREE.Vector3(1, 0, 0), body.inclination * degrees);
-    if ('ascendingNode' in body) target.applyAxisAngle(new THREE.Vector3(0, 1, 0), body.ascendingNode * degrees);
-    return target;
-  };
+  const orbitRadius = (body: SolarBody) => calculateOrbitRadius(body, realScale);
+  const bodyRadius = (body: SolarBody) => calculateBodyRadius(body, realScale);
+  const orbitalPosition = (body: SolarBody, meanAnomaly: number, target = new THREE.Vector3()) => calculateOrbitalPosition(body, meanAnomaly, realScale, target);
   function orbit(body: OrbitalBody, parent: THREE.Object3D = paths) {
     const points = Array.from({ length: 256 }, (_, i) => orbitalPosition(body, i / 256 * Math.PI * 2));
     const geom = new THREE.BufferGeometry().setFromPoints(points);
     const mat = new THREE.LineBasicMaterial({ color: 0x75829c, transparent: true, opacity: 0.23 });
     const line = new THREE.LineLoop(geom, mat);
     line.userData.orbitBody = body;
-    parent.add(line); geometries.push(geom); materials.push(mat);
+    parent.add(line); resources.geometry(geom); resources.material(mat);
     return line;
   }
-  function earthGrid() {
-    const points: THREE.Vector3[] = [];
-    const colors: number[] = [];
-    const radius = 1.008;
-    const segments = 72;
-    const gridColor = 0x718ca5;
-    const largestColor = 0xf2c96d;
-    const smallestColor = 0x74dec0;
-    const addLine = (pointAt: (step: number) => THREE.Vector3, color: number) => {
-      const lineColor = new THREE.Color(color);
-      for (let step = 0; step < segments; step++) {
-        points.push(pointAt(step), pointAt(step + 1));
-        lineColor.toArray(colors, colors.length);
-        lineColor.toArray(colors, colors.length);
-      }
-    };
-    for (let latitude = -60; latitude <= 60; latitude += 30) {
-      const lat = latitude * degrees;
-      addLine((step) => {
-        const longitude = step / segments * Math.PI * 2;
-        return new THREE.Vector3(Math.cos(lat) * Math.cos(longitude) * radius, Math.sin(lat) * radius, Math.cos(lat) * Math.sin(longitude) * radius);
-      }, latitude === 0 ? largestColor : gridColor);
-    }
-    for (let longitude = 0; longitude < 360; longitude += 30) {
-      const lon = longitude * degrees;
-      addLine((step) => {
-        const lat = -Math.PI / 2 + step / segments * Math.PI;
-        return new THREE.Vector3(Math.cos(lat) * Math.cos(lon) * radius, Math.sin(lat) * radius, Math.cos(lat) * Math.sin(lon) * radius);
-      }, longitude === 0 || longitude === 180 ? smallestColor : gridColor);
-    }
-    const geom = new THREE.BufferGeometry().setFromPoints(points);
-    geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    const mat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.48, depthWrite: false });
-    geometries.push(geom); materials.push(mat);
-    return new THREE.LineSegments(geom, mat);
-  }
   const earthLandmarkMeshes: THREE.Mesh[] = [];
-  function earthLandmarks() {
-    const locations: Landmark[] = [
-      { name: 'Stonehenge', location: 'Wiltshire, England', latitude: 51.1789, longitude: -1.8262, description: 'A prehistoric stone circle built in stages between roughly 3000 and 1600 BCE.' },
-      { name: 'Great Pyramid of Giza', location: 'Giza, Egypt', latitude: 29.9792, longitude: 31.1342, description: 'The largest pyramid at Giza, built as the tomb of Pharaoh Khufu around 2600 BCE.' },
-      { name: 'Machu Picchu', location: 'Cusco Region, Peru', latitude: -13.1631, longitude: -72.5459, description: 'A 15th-century Inca citadel set high in the eastern Andes.' },
-    ];
-    const markers = new THREE.Group();
-    const markerGeometry = new THREE.SphereGeometry(0.035, 12, 8);
-    const markerMaterial = new THREE.MeshBasicMaterial({ color: '#d9e895', depthTest: true });
-    geometries.push(markerGeometry); materials.push(markerMaterial);
-    locations.forEach((landmark) => {
-      const { latitude, longitude } = landmark;
-      const lat = latitude * degrees;
-      const lon = longitude * degrees;
-      const marker = new THREE.Mesh(markerGeometry, markerMaterial);
-      // SphereGeometry mirrors the texture's east-west axis, so east longitudes use -z.
-      marker.position.set(Math.cos(lat) * Math.cos(lon) * 1.035, Math.sin(lat) * 1.035, -Math.cos(lat) * Math.sin(lon) * 1.035);
-      marker.userData.landmark = landmark;
-      earthLandmarkMeshes.push(marker);
-      markers.add(marker);
-    });
-    return markers;
-  }
   let earthGridLine: THREE.LineSegments | null = null;
   const lunarShadowUniforms = {
     uEarthPosition: { value: new THREE.Vector3() },
@@ -299,7 +190,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
       };
       mat.customProgramCacheKey = () => `mission-mosaic-${body.name}`;
     }
-    materials.push(mat);
+    resources.material(mat);
     const group = new THREE.Group(); scene.add(group);
     const axialTilt = new THREE.Group(); group.add(axialTilt);
     const mesh = new THREE.Mesh(geometry, mat);
@@ -308,9 +199,11 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     else if (body.name === 'Uranus') axialTilt.rotation.z = 1.7;
     mesh.userData.name = body.name; axialTilt.add(mesh);
     if (body.name === 'Earth') {
-      earthGridLine = earthGrid();
+      earthGridLine = createEarthGrid(resources);
       mesh.add(earthGridLine);
-      mesh.add(earthLandmarks());
+      const landmarks = createEarthLandmarks(resources);
+      earthLandmarkMeshes.push(...landmarks.meshes);
+      mesh.add(landmarks.group);
     }
     const label = document.createElement('button');
     label.className = 'planet-label'; label.textContent = body.name;
@@ -322,7 +215,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
       const ringGeom = new THREE.RingGeometry(2.15, 3.5, 128, 6);
       const ringMat = new THREE.MeshStandardMaterial({ color: '#bca67b', side: THREE.DoubleSide, transparent: true, opacity: 0.7, roughness: 1 });
       ring = new THREE.Mesh(ringGeom, ringMat); ring.rotation.x = Math.PI / 2 - 0.4;
-      group.add(ring); geometries.push(ringGeom); materials.push(ringMat);
+      group.add(ring); resources.geometry(ringGeom); resources.material(ringMat);
     }
     // The lunar offset is anchored to the 2000-01-06 18:14 UTC new moon.
     const phase = body.name === 'Moon' ? 0.9573515073 : isSatellite(body) ? body.phaseDegrees * degrees : body.name === 'Earth' ? 357.529 * degrees : index * 2.399 + 0.6;
@@ -336,7 +229,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   });
   const earth = objects.find((item) => item.body.name === 'Earth')!;
   const moon = objects.find((item) => item.body.name === 'Moon')!;
-  const observerMarkerNames: BodyName[] = ['Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune'];
+  const observerMarkerNames: SkyTarget[] = SKY_TARGETS;
   const markerCanvas = document.createElement('canvas');
   markerCanvas.width = 64;
   markerCanvas.height = 64;
@@ -352,7 +245,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   }
   const observerMarkerTexture = new THREE.CanvasTexture(markerCanvas);
   observerMarkerTexture.colorSpace = THREE.SRGBColorSpace;
-  textures.push(observerMarkerTexture);
+  resources.texture(observerMarkerTexture);
   const observerMarkerColors: Partial<Record<BodyName, string>> = {
     Sun: '#ffd06d', Moon: '#e4ecff', Mercury: '#c7c1b8', Venus: '#f0c78d', Mars: '#e1805f',
     Jupiter: '#e2c09e', Saturn: '#e8d49c', Uranus: '#9bdbe5', Neptune: '#7fa5ff',
@@ -372,7 +265,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     marker.visible = false;
     marker.renderOrder = 20;
     scene.add(marker);
-    materials.push(markerMaterial);
+    resources.material(markerMaterial);
     observerMarkers.set(name, marker);
   });
   const eclipseCoronaCanvas = document.createElement('canvas');
@@ -410,7 +303,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   }
   const eclipseCoronaTexture = new THREE.CanvasTexture(eclipseCoronaCanvas);
   eclipseCoronaTexture.colorSpace = THREE.SRGBColorSpace;
-  textures.push(eclipseCoronaTexture);
+  resources.texture(eclipseCoronaTexture);
   const eclipseDiscCanvas = document.createElement('canvas');
   eclipseDiscCanvas.width = 128;
   eclipseDiscCanvas.height = 128;
@@ -426,7 +319,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   }
   const eclipseDiscTexture = new THREE.CanvasTexture(eclipseDiscCanvas);
   eclipseDiscTexture.colorSpace = THREE.SRGBColorSpace;
-  textures.push(eclipseDiscTexture);
+  resources.texture(eclipseDiscTexture);
   const eclipseCoronaMaterial = new THREE.SpriteMaterial({
     map: eclipseCoronaTexture,
     color: '#fff0ba',
@@ -440,7 +333,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   eclipseCorona.visible = false;
   eclipseCorona.renderOrder = 18;
   scene.add(eclipseCorona);
-  materials.push(eclipseCoronaMaterial);
+  resources.material(eclipseCoronaMaterial);
   const eclipseDiscMaterial = new THREE.SpriteMaterial({
     map: eclipseDiscTexture,
     color: '#030408',
@@ -453,7 +346,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   eclipseDisc.visible = false;
   eclipseDisc.renderOrder = 22;
   scene.add(eclipseDisc);
-  materials.push(eclipseDiscMaterial);
+  resources.material(eclipseDiscMaterial);
   const compassPoints = [
     { label: 'N', azimuth: 0 }, { label: 'NE', azimuth: 45 }, { label: 'E', azimuth: 90 }, { label: 'SE', azimuth: 135 },
     { label: 'S', azimuth: 180 }, { label: 'SW', azimuth: 225 }, { label: 'W', azimuth: 270 }, { label: 'NW', azimuth: 315 },
@@ -470,29 +363,18 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   let cachedLunarLatitude = 0;
   const lunarCoordinates = () => {
     if (days !== lunarCoordinateDay) {
-      const date = new Date(J2000_EPOCH + days * 86_400_000);
-      cachedLunarPhaseAngle = MoonPhase(date) * degrees;
-      cachedLunarLatitude = EclipticGeoMoon(date).lat * degrees;
+      const coordinates = calculateLunarCoordinates(simulationDaysToDate(days));
+      cachedLunarPhaseAngle = coordinates.phaseAngle;
+      cachedLunarLatitude = coordinates.latitude;
       lunarCoordinateDay = days;
     }
     return { phaseAngle: cachedLunarPhaseAngle, latitude: cachedLunarLatitude };
   };
   const moonPhase = () => {
-    const angle = lunarCoordinates().phaseAngle;
-    const illumination = (1 - Math.cos(angle)) / 2;
-    const phaseNames = ['New Moon', 'Waxing Crescent', 'First Quarter', 'Waxing Gibbous', 'Full Moon', 'Waning Gibbous', 'Last Quarter', 'Waning Crescent'];
-    return { illumination, name: phaseNames[Math.round(angle / (Math.PI / 4)) % phaseNames.length] };
+    return moonPhaseFromAngle(lunarCoordinates().phaseAngle);
   };
   const eclipseState = () => {
-    const earthToSun = earth.group.position.clone().multiplyScalar(-1).normalize();
-    const earthToMoon = moon.group.position.clone().sub(earth.group.position).normalize();
-    const moonToSun = moon.group.position.clone().multiplyScalar(-1).normalize();
-    const moonToEarth = earth.group.position.clone().sub(moon.group.position).normalize();
-    const solarSeparation = earthToSun.angleTo(earthToMoon);
-    const lunarSeparation = moonToSun.angleTo(moonToEarth);
-    if (solarSeparation < 0.025) return { type: 'Solar eclipse', detail: 'The Moon is crossing between Earth and the Sun.' };
-    if (lunarSeparation < 0.025) return { type: 'Lunar eclipse', detail: 'Earth is crossing between the Moon and the Sun.' };
-    return null;
+    return classifySceneEclipse(earth.group.position, moon.group.position);
   };
   const sunGlowMat = new THREE.ShaderMaterial({
     uniforms: { tint: { value: new THREE.Color('#ff9c38') } },
@@ -502,9 +384,9 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   });
   const glowGeometry = new THREE.PlaneGeometry(23, 23);
   const glow = new THREE.Mesh(glowGeometry, sunGlowMat);
-  scene.add(glow); geometries.push(glowGeometry); materials.push(sunGlowMat);
+  scene.add(glow); resources.geometry(glowGeometry); resources.material(sunGlowMat);
   let options: Options = { paused: false, speed: 12, orbits: true, labels: true, realScale: false };
-  let days = (Date.now() - J2000_EPOCH) / 86_400_000;
+  let days = dateToSimulationDays(new Date());
   let selected: BodyName | null = null;
   let earthObserver: EarthObserver | null = null;
   let observerTracking = true;
@@ -534,49 +416,11 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   const compassDirection = new THREE.Vector3();
   const compassPoint = new THREE.Vector3();
   const compassProjected = new THREE.Vector3();
-  const exactNorth = new THREE.Vector3(0, 0, 1);
   const sceneNorth = new THREE.Vector3(0, Math.cos(23.44 * degrees), -Math.sin(23.44 * degrees));
-  const exactSunEquator = new THREE.Vector3();
-  const exactEast = new THREE.Vector3();
-  const exactRight = new THREE.Vector3();
-  const sceneSunEquator = new THREE.Vector3();
-  const sceneEast = new THREE.Vector3();
-  const sceneRight = new THREE.Vector3();
-  const exactMoonDirection = new THREE.Vector3();
-  const mappedMoonDirection = new THREE.Vector3();
-  const exactObserverPosition = new THREE.Vector3();
   let width = 1, height = 1;
-  const updateCelestialBasis = (date: Date) => {
-    const astronomicalSun = GeoVector(AstronomyBody.Sun, date, true);
-    exactSunEquator.set(astronomicalSun.x, astronomicalSun.y, astronomicalSun.z).normalize();
-    exactEast.copy(exactNorth).addScaledVector(exactSunEquator, -exactNorth.dot(exactSunEquator)).normalize();
-    exactRight.crossVectors(exactSunEquator, exactEast).normalize();
-    sceneSunEquator.copy(origin).sub(earth.group.position).normalize();
-    sceneEast.copy(sceneNorth).addScaledVector(sceneSunEquator, -sceneNorth.dot(sceneSunEquator)).normalize();
-    sceneRight.crossVectors(sceneSunEquator, sceneEast).normalize();
-  };
-  const mapEqjDirection = (source: THREE.Vector3, target: THREE.Vector3) => {
-    target.copy(sceneSunEquator).multiplyScalar(source.dot(exactSunEquator));
-    target.addScaledVector(sceneEast, source.dot(exactEast));
-    target.addScaledVector(sceneRight, source.dot(exactRight));
-    return target;
-  };
-  const exactMoonPosition = (target: THREE.Vector3) => {
-    const date = new Date(J2000_EPOCH + days * 86_400_000);
-    const astronomicalMoon = GeoMoon(date);
-    updateCelestialBasis(date);
-    exactMoonDirection.set(astronomicalMoon.x, astronomicalMoon.y, astronomicalMoon.z);
-    mapEqjDirection(exactMoonDirection, mappedMoonDirection).multiplyScalar(sceneAU);
-    return target.copy(earth.group.position).add(mappedMoonDirection);
-  };
-  const exactBodyPosition = (body: AstronomyBody, target: THREE.Vector3) => {
-    const date = new Date(J2000_EPOCH + days * 86_400_000);
-    const astronomicalBody = GeoVector(body, date, true);
-    updateCelestialBasis(date);
-    exactMoonDirection.set(astronomicalBody.x, astronomicalBody.y, astronomicalBody.z);
-    mapEqjDirection(exactMoonDirection, mappedMoonDirection).multiplyScalar(sceneAU);
-    return target.copy(earth.group.position).add(mappedMoonDirection);
-  };
+  const celestialMapper = createCelestialMapper({ earthPosition: earth.group.position, sceneNorth, origin, sceneAU });
+  const exactMoonPosition = (target: THREE.Vector3) => celestialMapper.moonPosition(simulationDaysToDate(days), target);
+  const exactBodyPosition = (body: AstronomyBody, target: THREE.Vector3) => celestialMapper.bodyPosition(body, simulationDaysToDate(days), target);
   function refreshOrbitLines() {
     orbitLines.forEach(({ body, line }) => {
       const attribute = line.geometry.getAttribute('position') as THREE.BufferAttribute;
@@ -605,18 +449,12 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     selected = name;
     const item = objects.find((obj) => obj.body.name === name);
     const radius = item ? bodyRadius(item.body) : 0;
-    camera.near = item && realScale ? Math.max(radius * 0.08, 0.000000001) : 0.1;
+    const plan = calculateFocusCameraPlan({ selected: Boolean(item), realScale, radius, displayRadius: item?.body.radius ?? 0, currentDistance: camera.position.distanceTo(controls.target), homeVector: [home.x, home.y, home.z], mobile: width < 700 });
+    camera.near = plan.near;
     camera.updateProjectionMatrix();
-    const preferredDistance = item
-      ? realScale
-        ? Math.max(radius * 8, 0.000001)
-        : Math.max(item.body.radius * 7, 4)
-      : home.length();
-    const distance = item ? Math.min(camera.position.distanceTo(controls.target), preferredDistance) : home.length();
-    transitionThreshold = Math.min(0.03, Math.max(distance * 0.005, 0.000000001));
-    controls.minDistance = item ? Math.max(radius * 1.8, camera.near * 2.5) : 5;
-    offset.set(0.4, 0.6, 1).normalize().multiplyScalar(distance);
-    if (!item) offset.copy(home).multiplyScalar(width < 700 ? 1.4 : 1);
+    transitionThreshold = plan.transitionThreshold;
+    controls.minDistance = plan.minDistance;
+    offset.set(...plan.offset);
     transition = true;
     transitionStartedAt = performance.now();
     lastTarget.copy(item ? item.group.position : origin);
@@ -708,23 +546,11 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     const local = earth.mesh.worldToLocal(hit.point.clone()).normalize();
     const cameraDirection = earth.mesh.worldToLocal(camera.position.clone()).sub(local).normalize();
     if (local.dot(cameraDirection) <= 0) { gridTooltip.hidden = true; return; }
-    const latitude = Math.asin(THREE.MathUtils.clamp(local.y, -1, 1)) / degrees;
-    const longitude = THREE.MathUtils.euclideanModulo(Math.atan2(-local.z, local.x) / degrees + 180, 360) - 180;
-    const nearestLatitude = Math.round(latitude / 30) * 30;
-    const nearestLongitude = Math.round(longitude / 30) * 30;
-    const latitudeDelta = Math.abs(latitude - nearestLatitude);
-    const longitudeDelta = Math.abs(longitude - nearestLongitude);
-    const showLatitude = Math.abs(nearestLatitude) <= 60 && latitudeDelta <= longitudeDelta;
-    const value = showLatitude ? nearestLatitude : nearestLongitude;
-    const suffix = value === 0 || (!showLatitude && Math.abs(value) === 180) ? '' : showLatitude ? value > 0 ? ' N' : ' S' : value > 0 ? ' E' : ' W';
-    gridTooltip.textContent = `${Math.abs(value)}°${suffix} ${showLatitude ? 'latitude' : 'longitude'}`;
+    const reading = readEarthGridAt(local);
+    gridTooltip.textContent = reading.label;
     const measurement = document.createElement('span');
-    const isLargest = showLatitude && value === 0;
-    const isSmallest = !showLatitude && THREE.MathUtils.euclideanModulo(value, 180) === 0;
-    measurement.className = isLargest ? 'largest' : isSmallest ? 'smallest' : '';
-    measurement.textContent = showLatitude
-      ? `${isLargest ? 'Largest circumference (equator)' : 'Parallel circumference'} · ${parallelCircumferenceKm(value).toLocaleString(undefined, { maximumFractionDigits: 3 })} km`
-      : `${isSmallest ? 'Smallest measured meridian loop' : 'Approx. terrain surface loop'} · ${physicalMeridianLengthKm(value).toLocaleString(undefined, { maximumFractionDigits: 0 })} km`;
+    measurement.className = reading.className;
+    measurement.textContent = reading.measurement;
     gridTooltip.appendChild(measurement);
     gridTooltip.style.left = `${event.clientX - rect.left + 14}px`;
     gridTooltip.style.top = `${event.clientY - rect.top + 14}px`;
@@ -777,14 +603,12 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   renderer.domElement.addEventListener('webglcontextlost', contextLost);
   const updateEarthObserverCamera = () => {
     if (!earthObserver) return;
-    const date = new Date(J2000_EPOCH + days * 86_400_000);
-    const astronomicalObserver = ObserverVector(date, new Observer(earthObserver.latitude, earthObserver.longitude, 0), false);
-    updateCelestialBasis(date);
-    exactObserverPosition.set(astronomicalObserver.x, astronomicalObserver.y, astronomicalObserver.z);
-    mapEqjDirection(exactObserverPosition, observerNormal).normalize();
+    const date = simulationDaysToDate(days);
+    celestialMapper.observerPosition(date, earthObserver.latitude, earthObserver.longitude, observerNormal);
     observerNorth.copy(sceneNorth).addScaledVector(observerNormal, -sceneNorth.dot(observerNormal));
     if (observerNorth.lengthSq() < 0.000001) {
-      observerNorth.copy(sceneEast).addScaledVector(observerNormal, -sceneEast.dot(observerNormal));
+      const eastDirection = celestialMapper.sceneEastDirection();
+      observerNorth.copy(eastDirection).addScaledVector(observerNormal, -eastDirection.dot(observerNormal));
     }
     observerNorth.normalize();
     observerEast.crossVectors(observerNorth, observerNormal).normalize();
@@ -898,8 +722,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
         mesh.rotation.y = -phaseAngle;
       } else {
         if (body.distance) {
-          const astronomyBody = observerAstronomyBodies[body.name];
-          if (earthObserver && astronomyBody && !isSatellite(body)) exactBodyPosition(astronomyBody, group.position);
+          if (earthObserver && SKY_TARGETS.includes(body.name as SkyTarget) && !isSatellite(body)) exactBodyPosition(astronomyBodyForTarget(body.name as SkyTarget), group.position);
           else group.position.copy(orbitalPosition(body, angle));
           if (isSatellite(body)) {
             const parent = objectByName.get(body.parent);
@@ -920,11 +743,9 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     lunarShadowUniforms.uEarthRadius.value = bodyRadius(earth.body);
     lunarShadowUniforms.uSunRadius.value = bodyRadius(objects[0].body);
     const { phaseAngle, latitude } = lunarCoordinates();
-    const eclipseSeparation = Math.acos(THREE.MathUtils.clamp(Math.cos(latitude) * Math.cos(phaseAngle - Math.PI), -1, 1));
     // Physical angular limits as seen from the Moon: the inner value covers a
     // total eclipse of the lunar disc; the outer value includes the penumbra.
-    const eclipseBlend = THREE.MathUtils.smoothstep(eclipseSeparation / degrees, 0.42, 1.48);
-    lunarShadowUniforms.uEclipseStrength.value = 1 - eclipseBlend;
+    lunarShadowUniforms.uEclipseStrength.value = lunarEclipseStrength({ phaseAngle, latitude });
     const target = objects.find((item) => item.body.name === selected)?.group.position;
     desired.copy(target ?? origin);
     if (earthObserver) {
@@ -994,11 +815,11 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
       }
       options = next;
     },
-    setDate(date: Date) { days = (date.getTime() - J2000_EPOCH) / 86_400_000; },
-    getDate() { return new Date(J2000_EPOCH + days * 86_400_000); },
+    setDate(date: Date) { days = dateToSimulationDays(date); },
+    getDate() { return simulationDaysToDate(days); },
     getMoonPhase: moonPhase,
     getEclipseState: eclipseState,
-    reset() { days = (Date.now() - J2000_EPOCH) / 86_400_000; setEarthObserver(null); focus(null); },
+    reset() { days = dateToSimulationDays(new Date()); setEarthObserver(null); focus(null); },
     dispose() {
       renderer.setAnimationLoop(null); observer.disconnect(); controls.dispose();
       mobileMedia.removeEventListener('change', updateTouchAction);
@@ -1009,7 +830,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
       renderer.domElement.removeEventListener('pointercancel', pointerCancel);
       renderer.domElement.removeEventListener('wheel', wheel);
       renderer.domElement.removeEventListener('webglcontextlost', contextLost);
-      geometries.forEach((item) => item.dispose()); materials.forEach((item) => item.dispose()); textures.forEach((item) => item.dispose());
+      resources.dispose();
       objects.forEach((item) => item.label.remove()); compassPoints.forEach(({ element }) => element.remove()); gridTooltip.remove(); renderer.dispose(); renderer.domElement.remove();
     },
   };
