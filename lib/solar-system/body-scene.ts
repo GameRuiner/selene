@@ -17,7 +17,6 @@ export type BodyScene = {
   earth: SceneBody;
   moon: SceneBody;
   sunGlow: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
-  lunarAxis: THREE.Vector3;
   projected: THREE.Vector3;
   earthGridLine: THREE.LineSegments;
   earthLandmarkMeshes: THREE.Mesh[];
@@ -58,7 +57,6 @@ export function createBodyScene(options: {
   scene.add(paths);
   const geometry = resources.geometry(new THREE.SphereGeometry(1, 64, 40));
   const earthLandmarkMeshes: THREE.Mesh[] = [];
-  const lunarAxis = new THREE.Vector3(0, 1, 0);
   let earthGridLine: THREE.LineSegments | undefined;
 
   const objects = bodies.map((body, index): SceneBody => {
@@ -129,8 +127,7 @@ export function createBodyScene(options: {
       const ringMaterial = resources.material(new THREE.MeshStandardMaterial({ color: '#bca67b', side: THREE.DoubleSide, transparent: true, opacity: 0.7, roughness: 1 }));
       ring = new THREE.Mesh(ringGeometry, ringMaterial); ring.rotation.x = Math.PI / 2 - 0.4; group.add(ring);
     }
-    // Keep the lunar offset anchored to the 2000-01-06 18:14 UTC new moon.
-    const phase = body.name === 'Moon' ? 0.9573515073 : initialOrbitalPhase(body, index);
+    const phase = initialOrbitalPhase(body, index);
     return { body, group, mesh, ring, label, phase };
   });
   const objectByName = new Map(objects.map((item) => [item.body.name, item]));
@@ -156,7 +153,7 @@ export function createBodyScene(options: {
   return {
     paths, geometry, objects, objectByName, orbitLines,
     sunGlow,
-    earth: objectByName.get('Earth')!, moon: objectByName.get('Moon')!, lunarAxis, projected: new THREE.Vector3(),
+    earth: objectByName.get('Earth')!, moon: objectByName.get('Moon')!, projected: new THREE.Vector3(),
     earthGridLine: earthGridLine!, earthLandmarkMeshes,
     refreshOrbitLines() {
       orbitLines.forEach(({ body, line }) => {
@@ -189,15 +186,9 @@ export function updateBodyScene(bodyScene: BodyScene, frame: {
   objects.forEach(({ body, group, mesh, ring, phase, label }) => {
     const angle = orbitalAngle(body, days, phase);
     if (body.name === 'Moon') {
-      const { phaseAngle, latitude } = lunarCoordinates();
-      if (realScale) exactMoonPosition(group.position);
-      else {
-        const radius = orbitRadius(body, realScale);
-        group.position.copy(earth.group.position).multiplyScalar(-1).normalize().applyAxisAngle(bodyScene.lunarAxis, -phaseAngle);
-        group.position.multiplyScalar(Math.cos(latitude));
-        group.position.y = Math.sin(latitude);
-        group.position.multiplyScalar(radius).add(earth.group.position);
-      }
+      const { phaseAngle } = lunarCoordinates();
+      exactMoonPosition(group.position);
+      if (!realScale) group.position.sub(earth.group.position).setLength(orbitRadius(body, false)).add(earth.group.position);
       mesh.rotation.y = -phaseAngle;
     } else {
       if (body.distance) {

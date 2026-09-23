@@ -4,7 +4,7 @@ import { Body as AstronomyBody } from 'astronomy-engine';
 import { type BodyName, isSatellite } from './solar-data';
 import { dateToSimulationDays, simulationDaysToDate } from './astronomy/time';
 import { lunarCoordinates as calculateLunarCoordinates, moonPhaseFromAngle, classifySceneEclipse } from './astronomy/moon';
-import { bodyRadius as calculateBodyRadius } from './solar-system/orbit-math';
+import { bodyRadius as calculateBodyRadius, orbitRadius } from './solar-system/orbit-math';
 import { createFocusCameraController } from './solar-system/camera-controller';
 import { astronomyBodyForTarget, SKY_TARGETS, type SkyTarget } from './astronomy/observer';
 import { createResourceRegistry } from './solar-system/resources';
@@ -12,6 +12,7 @@ import { createCelestialMapper } from './solar-system/celestial-mapper';
 import { createBodyScene, updateBodyScene, updateBodyLabels } from './solar-system/body-scene';
 import { createEarthObserverView, type EarthObserverView } from './solar-system/earth-observer-view';
 import { bindSceneInput } from './solar-system/input-controller';
+import { createMoonOrbitMapper, writeMoonOrbitPath } from './solar-system/moon-orbit';
 
 import type { SolarSystem, LandmarkSelection, EarthObserver, SolarSystemOptions } from './solar-system/types';
 export type { SolarSystem, Landmark, LandmarkSelection, EarthObserver, SolarSystemOptions } from './solar-system/types';
@@ -69,6 +70,8 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   };
   const bodyScene = createBodyScene({ scene, host, renderer, resources, realScale: () => realScale, lunarShadowUniforms, focus: (name) => focus(name), onSelect, onLandmarkSelect, onError });
   const { paths, objects, objectByName, orbitLines, earth, moon, refreshOrbitLines } = bodyScene;
+  const moonOrbitLine = orbitLines.find(({ body }) => body.name === 'Moon')!.line;
+  let moonOrbitDay = Number.NaN;
   const bodyRadius = (body: (typeof objects)[number]['body']) => calculateBodyRadius(body, realScale);
   const focusCamera = createFocusCameraController({ camera, controls, bodyScene, home, origin, isRealScale: () => realScale, width: () => width, radiusFor: (name) => bodyRadius(objectByName.get(name)!.body) });
   let lunarCoordinateDay = Number.NaN;
@@ -95,7 +98,9 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   let selected: BodyName | null = null;
   const sceneNorth = new THREE.Vector3(0, Math.cos(23.44 * degrees), -Math.sin(23.44 * degrees));
   const celestialMapper = createCelestialMapper({ earthPosition: earth.group.position, sceneNorth, origin, sceneAU });
+  const moonOrbitMapper = createMoonOrbitMapper(earth.group.position);
   const exactMoonPosition = (target: THREE.Vector3) => celestialMapper.moonPosition(simulationDaysToDate(days), target);
+  const displayMoonPosition = (target: THREE.Vector3) => moonOrbitMapper.moonPosition(simulationDaysToDate(days), target);
   const exactBodyPosition = (body: AstronomyBody, target: THREE.Vector3) => celestialMapper.bodyPosition(body, simulationDaysToDate(days), target);
   const astronomyBodyForObserverTarget = (name: string) => SKY_TARGETS.includes(name as SkyTarget) ? astronomyBodyForTarget(name as SkyTarget) : undefined;
   observerView = createEarthObserverView({ scene, host, resources, starMaterial, realScale: () => realScale, camera, controls, bodyScene, mapper: celestialMapper, sceneNorth, origin, width: () => width, height: () => height, onFreeLook: onObserverFreeLook, lunarEclipseStrength: () => lunarShadowUniforms.uEclipseStrength.value });
@@ -143,10 +148,15 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     if (!document.hidden && !options.paused) days += elapsed * options.speed;
     const earthObserver = observerView!.current;
     const selectedSystem = updateBodyScene(bodyScene, {
-      days, realScale, earthObserver, selected, lunarCoordinates, exactMoonPosition, exactBodyPosition,
+      days, realScale, earthObserver, selected, lunarCoordinates, exactMoonPosition: earthObserver ? exactMoonPosition : displayMoonPosition, exactBodyPosition,
       astronomyBodyForTarget: astronomyBodyForObserverTarget,
       lunarShadowUniforms,
     });
+    if (options.orbits && !earthObserver && (!Number.isFinite(moonOrbitDay) || Math.abs(days - moonOrbitDay) > 1 / 288)) {
+      writeMoonOrbitPath(simulationDaysToDate(days), moonOrbitMapper, realScale ? null : orbitRadius(moon.body, false), moonOrbitLine.geometry.getAttribute('position') as THREE.BufferAttribute);
+      moonOrbitLine.geometry.computeBoundingSphere();
+      moonOrbitDay = days;
+    }
     sunGlow.scale.setScalar(bodyRadius(objects[0].body) / objects[0].body.radius);
     sunGlow.visible = !observerView!.active;
     const target = selected ? objectByName.get(selected)?.group.position ?? null : null;
@@ -170,6 +180,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     setOptions(next: Options) {
       if (next.realScale !== options.realScale) {
         realScale = next.realScale;
+        moonOrbitDay = Number.NaN;
         refreshOrbitLines();
         if (observerView!.active) {
           camera.near = Math.max(bodyRadius(earth.body) * 0.0005, 0.000000001);
