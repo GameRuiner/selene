@@ -12,13 +12,16 @@
 - [x] Fix disappearing on a true scale
 - [x] On eclipses time set, use some time offset to see start of eclipse
 - [x] Add planet size, mass, circumference
+- [ ] When select solar eclipse, pick place with full eclipse
 - [ ] Add possibility to move time backwards
 - [x] Add Pluto, Eris and Ceres and other dwarf planets
-- [ ] Refactor code
+- [x] Refactor code
 - [ ] Add moon shadow on Earth
 - [ ] Add gravitational field visualization
-- [ ] Add day and night from view from Earth 
+- [x] Add day and night from view from Earth 
 - [ ] Add Apophis 
 - [ ] Check planes of orbit for all planets and moons
+- [ ] Add place to add comments with new features requests and bugs
+- [ ] Refactor css
 
 what is lunar eclipse

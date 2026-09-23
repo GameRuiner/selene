@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { eventsForYear, sameLocalDay } from '../lib/astronomy/events';
 import { moonPhaseFromAngle, lunarEclipseStrength, classifySceneEclipse } from '../lib/astronomy/moon';
 import * as THREE from 'three';
+import { Observer, SearchLocalSolarEclipse } from 'astronomy-engine';
+import { findBody } from '../lib/solar-data';
+import { dateToSimulationDays } from '../lib/astronomy/time';
+import { bodyRadius, initialOrbitalPhase, orbitalAngle, orbitalPosition } from '../lib/solar-system/orbit-math';
+import { createCelestialMapper } from '../lib/solar-system/celestial-mapper';
 
 describe('astronomy events and lunar state', () => {
   it('names cardinal lunar phases and classifies aligned scene eclipses', () => {
@@ -22,5 +27,32 @@ describe('astronomy events and lunar state', () => {
     expect(events.some((event) => event.kind === 'lunar-eclipse' && sameLocalDay(event.date, new Date(2024, 2, 25)))).toBe(true);
     expect(eventsForYear(2026).some((event) => event.kind === 'lunar-eclipse' && sameLocalDay(event.date, new Date(2026, 2, 3)))).toBe(true);
     expect(sameLocalDay(new Date(2024, 0, 2, 23), new Date(2024, 0, 2, 1))).toBe(true);
+  });
+  it('opens the August 2026 total eclipse before local first contact in Reykjavík', () => {
+    const event = eventsForYear(2026).find((item) => item.kind === 'solar-eclipse' && item.date.getUTCMonth() === 7);
+    expect(event?.observation?.location.label).toBe('Reykjavík');
+    expect(event?.observation?.location.timeZone).toBe('Atlantic/Reykjavik');
+    const location = event!.observation!.location;
+    const local = SearchLocalSolarEclipse(new Date('2026-08-01T00:00:00Z'), new Observer(location.latitude, location.longitude, 0));
+    expect(event!.observation!.date.getTime()).toBe(local.partial_begin.time.date.getTime() - 5 * 60_000);
+    expect(event!.observation!.date.getTime()).toBeLessThan(local.peak.time.date.getTime());
+    expect(local.partial_end.time.date.getTime()).toBeGreaterThan(local.peak.time.date.getTime());
+    expect(Math.abs(local.peak.time.date.getTime() - Date.parse('2026-08-12T17:48:30Z'))).toBeLessThan(120_000);
+    const warsaw = SearchLocalSolarEclipse(new Date('2026-08-01T00:00:00Z'), new Observer(52.2297, 21.0122, 0));
+    expect(warsaw.kind).toBe('partial');
+
+    const earth = findBody('Earth');
+    const date = local.peak.time.date;
+    const days = dateToSimulationDays(date);
+    const earthPosition = orbitalPosition(earth, orbitalAngle(earth, days, initialOrbitalPhase(earth, 3)), true);
+    const sceneNorth = new THREE.Vector3(0, Math.cos(23.44 * Math.PI / 180), -Math.sin(23.44 * Math.PI / 180));
+    const origin = new THREE.Vector3();
+    const mapper = createCelestialMapper({ earthPosition, sceneNorth, origin, sceneAU: 14 });
+    const surfaceNormal = mapper.observerPosition(date, location.latitude, location.longitude, new THREE.Vector3());
+    const cameraPosition = earthPosition.clone().addScaledVector(surfaceNormal, bodyRadius(earth, true) * 1.002);
+    const moonPosition = mapper.moonPosition(date, new THREE.Vector3());
+    const sunDirection = origin.clone().sub(cameraPosition).normalize();
+    const moonDirection = moonPosition.sub(cameraPosition).normalize();
+    expect(sunDirection.angleTo(moonDirection) * 180 / Math.PI).toBeLessThan(0.15);
   });
 });

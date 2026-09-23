@@ -2,12 +2,26 @@ import * as THREE from 'three';
 import type { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { BodyName } from '../solar-data';
 import { SKY_TARGETS } from '../astronomy/observer';
+import { moonPhaseFromAngle } from '../astronomy/moon';
 import type { EarthObserver } from './types';
 import type { CelestialMapper } from './celestial-mapper';
 import type { BodyScene } from './body-scene';
 import type { ResourceRegistry } from './resources';
+import { earthSkyLighting } from './earth-sky-light';
+import { bodyRadius, orbitRadius } from './orbit-math';
 
 const degrees = Math.PI / 180;
+const observerFov = 55;
+const markerDistance = 10;
+const referenceFovTangent = Math.tan(observerFov * degrees / 2);
+
+export function observerMarkerWorldSize(fov: number, viewportHeight: number, referencePixels: number): number {
+  const fovTangent = Math.tan(fov * degrees / 2);
+  // Screen size grows with zoom, but less than a physical disc so guide markers stay readable.
+  return 2 * markerDistance * referenceFovTangent * Math.sqrt(fovTangent / referenceFovTangent)
+    * referencePixels / Math.max(viewportHeight, 1);
+}
+
 const observerMarkerColors: Record<string, string> = {
   Sun: '#ffd06d', Moon: '#e4ecff', Mercury: '#c7c1b8', Venus: '#f0c78d', Mars: '#e1805f',
   Jupiter: '#e2c09e', Saturn: '#e8d49c', Uranus: '#9bdbe5', Neptune: '#7fa5ff',
@@ -32,6 +46,8 @@ export function createEarthObserverView(options: {
   scene: THREE.Scene;
   host: HTMLDivElement;
   resources: ResourceRegistry;
+  starMaterial: THREE.PointsMaterial;
+  realScale: () => boolean;
   camera: THREE.PerspectiveCamera;
   controls: OrbitControls;
   bodyScene: BodyScene;
@@ -43,7 +59,51 @@ export function createEarthObserverView(options: {
   onFreeLook: () => void;
   lunarEclipseStrength: () => number;
 }): EarthObserverView {
-  const { scene, host, resources, camera, controls, bodyScene, mapper, sceneNorth, origin, width, height, onFreeLook, lunarEclipseStrength } = options;
+  const { scene, host, resources, starMaterial, realScale, camera, controls, bodyScene, mapper, sceneNorth, origin, width, height, onFreeLook, lunarEclipseStrength } = options;
+  const normalStarOpacity = starMaterial.opacity;
+  const skyGeometry = resources.geometry(new THREE.SphereGeometry(1, 64, 32));
+  const skyMaterial = resources.material(new THREE.ShaderMaterial({
+    uniforms: {
+      horizonUp: { value: new THREE.Vector3(0, 1, 0) },
+      sunDirection: { value: new THREE.Vector3(0, 1, 0) },
+      daylight: { value: 0 },
+      twilight: { value: 0 },
+    },
+    vertexShader: `
+      varying vec3 vSkyDirection;
+      void main() {
+        vSkyDirection = normalize(mat3(modelMatrix) * position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vSkyDirection;
+      uniform vec3 horizonUp;
+      uniform vec3 sunDirection;
+      uniform float daylight;
+      uniform float twilight;
+      void main() {
+        vec3 direction = normalize(vSkyDirection);
+        float elevation = max(dot(direction, normalize(horizonUp)), 0.0);
+        float zenith = smoothstep(0.0, 0.85, elevation);
+        vec3 nightSky = mix(vec3(0.012, 0.025, 0.065), vec3(0.003, 0.010, 0.035), zenith);
+        vec3 daySky = mix(vec3(0.43, 0.66, 0.78), vec3(0.055, 0.27, 0.58), sqrt(elevation));
+        vec3 color = mix(nightSky, daySky, daylight);
+        float sunward = pow(max(dot(direction, normalize(sunDirection)), 0.0), 10.0);
+        float nearHorizon = exp(-8.0 * elevation);
+        color = mix(color, vec3(0.91, 0.38, 0.17), twilight * sunward * nearHorizon * 0.72);
+        gl_FragColor = vec4(color, 1.0);
+        #include <colorspace_fragment>
+      }
+    `,
+    side: THREE.BackSide, depthTest: false, depthWrite: false, toneMapped: false,
+  }));
+  const sky = new THREE.Mesh(skyGeometry, skyMaterial);
+  sky.visible = false; sky.frustumCulled = false; sky.renderOrder = -10; scene.add(sky);
+  const nightGroundColor = new THREE.Color('#30342f');
+  const dayGroundColor = new THREE.Color('#647c72');
+  const nightHorizonColor = new THREE.Color('#89939a');
+  const dayHorizonColor = new THREE.Color('#c1d1c5');
   const horizonGeometry = resources.geometry(new THREE.SphereGeometry(1, 96, 48));
   const horizonMaterial = resources.material(new THREE.ShaderMaterial({
     uniforms: { horizonUp: { value: new THREE.Vector3(0, 1, 0) }, groundColor: { value: new THREE.Color('#30342f') }, lineColor: { value: new THREE.Color('#89939a') } },
@@ -82,6 +142,7 @@ export function createEarthObserverView(options: {
   }
   const markerTexture = resources.texture(new THREE.CanvasTexture(markerCanvas)); markerTexture.colorSpace = THREE.SRGBColorSpace;
   const markers = new Map<BodyName, THREE.Sprite>();
+  const sunBody = bodyScene.objectByName.get('Sun')!;
   SKY_TARGETS.forEach((name) => {
     const material = resources.material(new THREE.SpriteMaterial({ map: markerTexture, color: observerMarkerColors[name] ?? '#ffffff', transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
     const marker = new THREE.Sprite(material); marker.visible = false; marker.renderOrder = 20; scene.add(marker); markers.set(name, marker);
@@ -112,8 +173,13 @@ export function createEarthObserverView(options: {
   const discTexture = resources.texture(new THREE.CanvasTexture(discCanvas)); discTexture.colorSpace = THREE.SRGBColorSpace;
   const coronaMaterial = resources.material(new THREE.SpriteMaterial({ map: coronaTexture, color: '#fff0ba', transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
   const corona = new THREE.Sprite(coronaMaterial); corona.visible = false; corona.renderOrder = 18; scene.add(corona);
-  const discMaterial = resources.material(new THREE.SpriteMaterial({ map: discTexture, color: '#030408', transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
-  const disc = new THREE.Sprite(discMaterial); disc.visible = false; disc.renderOrder = 22; scene.add(disc);
+  const sunDiscMaterial = resources.material(new THREE.SpriteMaterial({ map: discTexture, color: '#fff2d2', transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
+  const sunDisc = new THREE.Sprite(sunDiscMaterial); sunDisc.visible = false; sunDisc.renderOrder = 21; scene.add(sunDisc);
+  const moonDiscMaterial = resources.material(new THREE.SpriteMaterial({ map: discTexture, color: '#060a10', transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
+  const moonDisc = new THREE.Sprite(moonDiscMaterial); moonDisc.visible = false; moonDisc.renderOrder = 22; scene.add(moonDisc);
+  const darkMoonColor = new THREE.Color('#060a10');
+  const brightMoonColor = new THREE.Color('#e4ecff');
+  const eclipsedMoonColor = new THREE.Color('#b94c32');
 
   const compass = [
     { label: 'N', azimuth: 0 }, { label: 'NE', azimuth: 45 }, { label: 'E', azimuth: 90 }, { label: 'SE', azimuth: 135 },
@@ -128,17 +194,17 @@ export function createEarthObserverView(options: {
   const markerDirection = new THREE.Vector3(), sunDirection = new THREE.Vector3(), moonDirection = new THREE.Vector3();
   const compassDirection = new THREE.Vector3(), compassPoint = new THREE.Vector3(), compassProjected = new THREE.Vector3();
   let observer: EarthObserver | null = null;
-  let tracking = true, dragging = false, azimuth = 0, altitude = 0, fov = 55;
+  let tracking = true, dragging = false, azimuth = 0, altitude = 0, fov = observerFov;
   let pointerX = 0, pointerY = 0;
 
   const setObserver = (next: EarthObserver | null): boolean => {
     const wasActive = observer !== null;
-    if (next && !wasActive) fov = 55;
+    if (next && !wasActive) fov = observerFov;
     observer = next; tracking = Boolean(next); dragging = false;
-    horizon.visible = Boolean(next);
+    sky.visible = Boolean(next); horizon.visible = Boolean(next);
     bodyScene.earthGridLine.visible = !next;
     bodyScene.earthLandmarkMeshes.forEach((marker) => { marker.visible = !next; });
-    if (!next) { markers.forEach((marker) => { marker.visible = false; }); corona.visible = false; disc.visible = false; }
+    if (!next) { markers.forEach((marker) => { marker.visible = false; }); corona.visible = false; sunDisc.visible = false; moonDisc.visible = false; starMaterial.opacity = normalStarOpacity; }
     controls.enabled = !next;
     camera.fov = next ? fov : 42;
     if (!next) camera.up.set(0, 1, 0);
@@ -169,40 +235,54 @@ export function createEarthObserverView(options: {
     observerUp.copy(observerNormal);
     if (Math.abs(observerUp.dot(lookDirection)) > 0.98) observerUp.copy(observerNorth).addScaledVector(lookDirection, -observerNorth.dot(lookDirection));
     camera.up.copy(observerUp.normalize()); camera.lookAt(controls.target);
+    sky.position.copy(camera.position); sky.scale.setScalar(40);
     horizon.position.copy(camera.position); horizon.scale.setScalar(40);
+    (skyMaterial.uniforms.horizonUp.value as THREE.Vector3).copy(observerNormal);
     (horizonMaterial.uniforms.horizonUp.value as THREE.Vector3).copy(observerNormal);
 
     markers.forEach((marker, name) => {
       const bodyPosition = bodyScene.objectByName.get(name as BodyName)?.group.position;
       if (!bodyPosition) { marker.visible = false; return; }
-      markerDirection.copy(bodyPosition).sub(camera.position).normalize(); marker.position.copy(camera.position).addScaledVector(markerDirection, 10);
-      const markerPixelScale = 20 * Math.tan(camera.fov * degrees / 2) / Math.max(height(), 1);
-      marker.scale.setScalar(markerPixelScale * (name === 'Sun' || name === 'Moon' ? 14 : 10));
+      markerDirection.copy(bodyPosition).sub(camera.position).normalize(); marker.position.copy(camera.position).addScaledVector(markerDirection, markerDistance);
+      marker.scale.setScalar(observerMarkerWorldSize(camera.fov, height(), name === 'Sun' ? 18 : 10));
       const aboveHorizon = markerDirection.dot(observerNormal) > 0;
       marker.visible = true; marker.userData.aboveHorizon = aboveHorizon; marker.userData.eclipseHidden = false;
-      const material = marker.material as THREE.SpriteMaterial; material.color.set(observerMarkerColors[name] ?? '#ffffff'); material.opacity = aboveHorizon ? 1 : 0.42;
+      const material = marker.material as THREE.SpriteMaterial; material.color.set(observerMarkerColors[name] ?? '#ffffff'); material.opacity = name === 'Moon' ? 0 : aboveHorizon ? 1 : 0.42;
     });
-    const sun = markers.get('Sun'), moon = markers.get('Moon'); corona.visible = false; disc.visible = false;
+    const sun = markers.get('Sun'), moon = markers.get('Moon'); corona.visible = false;
+    sunDisc.visible = Boolean(sun?.visible); moonDisc.visible = Boolean(moon?.visible);
+    // Both discs follow their actual angular size; the Sun's separate halo makes it look brighter and larger.
+    const sunDiscSize = 20 * bodyRadius(sunBody.body, true) / Math.max(sunBody.group.position.distanceTo(camera.position), 0.000001);
+    const moonDistance = realScale() ? bodyScene.moon.group.position.distanceTo(camera.position) : orbitRadius(bodyScene.moon.body, true);
+    const moonDiscSize = 20 * bodyRadius(bodyScene.moon.body, true) / Math.max(moonDistance, 0.000001);
+    if (sun) { sunDisc.position.copy(sun.position); sunDisc.scale.setScalar(sunDiscSize); sunDiscMaterial.opacity = sun.userData.aboveHorizon === false ? 0.42 : 1; }
+    if (moon) { moonDisc.position.copy(moon.position); moonDisc.scale.setScalar(moonDiscSize); moonDiscMaterial.opacity = moon.userData.aboveHorizon === false ? 0.42 : 1; }
+    let solarSeparation = 180;
     if (sun?.visible && moon?.visible) {
       sunDirection.copy(sun.position).sub(camera.position).normalize(); moonDirection.copy(moon.position).sub(camera.position).normalize();
-      const solarSeparation = sunDirection.angleTo(moonDirection) / degrees;
-      const solarStrength = 1 - THREE.MathUtils.smoothstep(solarSeparation, 0.16, 1.15);
+      solarSeparation = sunDirection.angleTo(moonDirection) / degrees;
+    } else if (sun?.visible) sunDirection.copy(sun.position).sub(camera.position).normalize();
+    const lighting = earthSkyLighting(Math.asin(THREE.MathUtils.clamp(sunDirection.dot(observerNormal), -1, 1)), solarSeparation);
+    (skyMaterial.uniforms.sunDirection.value as THREE.Vector3).copy(sunDirection);
+    skyMaterial.uniforms.daylight.value = lighting.effectiveDaylight;
+    skyMaterial.uniforms.twilight.value = lighting.twilight;
+    (horizonMaterial.uniforms.groundColor.value as THREE.Color).lerpColors(nightGroundColor, dayGroundColor, lighting.effectiveDaylight);
+    (horizonMaterial.uniforms.lineColor.value as THREE.Color).lerpColors(nightHorizonColor, dayHorizonColor, lighting.effectiveDaylight);
+    starMaterial.opacity = normalStarOpacity * lighting.starVisibility;
+    if (sun?.visible && moon?.visible) {
       const moonAboveHorizon = moon.userData.aboveHorizon !== false;
-      const markerPixelScale = 20 * Math.tan(camera.fov * degrees / 2) / Math.max(height(), 1);
-      if (solarStrength > 0.015) {
-        corona.position.copy(sun.position); corona.scale.setScalar(markerPixelScale * (135 + solarStrength * 85)); coronaMaterial.color.set('#fff0ba');
-        coronaMaterial.opacity = (0.45 + solarStrength * 0.55) * (moonAboveHorizon ? 1 : 0.35); corona.visible = true;
-        disc.position.copy(moon.position); disc.scale.setScalar(markerPixelScale * 22); discMaterial.color.set('#030408');
-        discMaterial.opacity = (0.68 + solarStrength * 0.32) * (moonAboveHorizon ? 1 : 0.5); disc.visible = true;
-        (moon.material as THREE.SpriteMaterial).opacity = 0; moon.userData.eclipseHidden = true;
+      const illumination = moonPhaseFromAngle(solarSeparation * degrees).illumination;
+      moonDiscMaterial.color.lerpColors(darkMoonColor, brightMoonColor, illumination);
+      if (lighting.solarCoverage > 0.015) {
+        corona.position.copy(sun.position); corona.scale.setScalar(sunDiscSize * (4.5 + lighting.solarCoverage * 2.5)); coronaMaterial.color.set('#fff0ba');
+        coronaMaterial.opacity = lighting.solarCoverage * (0.45 + lighting.solarCoverage * 0.55) * (moonAboveHorizon ? 1 : 0.35); corona.visible = true;
+        moon.userData.eclipseHidden = true;
       } else {
         const strength = lunarEclipseStrength();
         if (strength > 0.015) {
-          corona.position.copy(moon.position); corona.scale.setScalar(markerPixelScale * (90 + strength * 60)); coronaMaterial.color.set('#c94424');
+          corona.position.copy(moon.position); corona.scale.setScalar(moonDiscSize * (3.5 + strength * 2)); coronaMaterial.color.set('#c94424');
           coronaMaterial.opacity = strength * (moonAboveHorizon ? 0.72 : 0.25); corona.visible = true;
-          disc.position.copy(moon.position); disc.scale.setScalar(markerPixelScale * 20); discMaterial.color.set('#b94c32');
-          discMaterial.opacity = (0.55 + strength * 0.4) * (moonAboveHorizon ? 1 : 0.42); disc.visible = true;
-          (moon.material as THREE.SpriteMaterial).color.set('#ff9a72');
+          moonDiscMaterial.color.lerp(eclipsedMoonColor, strength * 0.8);
         }
       }
     }

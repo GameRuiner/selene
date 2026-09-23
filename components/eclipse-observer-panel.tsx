@@ -22,11 +22,12 @@ type EclipseObserverPanelProps = {
 };
 
 const placePresets: ObserverLocation[] = [
-  { label: 'Warsaw', latitude: 52.2297, longitude: 21.0122 },
-  { label: 'New York', latitude: 40.7128, longitude: -74.006 },
-  { label: 'Cairo', latitude: 30.0444, longitude: 31.2357 },
-  { label: 'Tokyo', latitude: 35.6762, longitude: 139.6503 },
-  { label: 'Sydney', latitude: -33.8688, longitude: 151.2093 },
+  { label: 'Warsaw', latitude: 52.2297, longitude: 21.0122, timeZone: 'Europe/Warsaw' },
+  { label: 'Reykjavík', latitude: 64.1466, longitude: -21.9426, timeZone: 'Atlantic/Reykjavik' },
+  { label: 'New York', latitude: 40.7128, longitude: -74.006, timeZone: 'America/New_York' },
+  { label: 'Cairo', latitude: 30.0444, longitude: 31.2357, timeZone: 'Africa/Cairo' },
+  { label: 'Tokyo', latitude: 35.6762, longitude: 139.6503, timeZone: 'Asia/Tokyo' },
+  { label: 'Sydney', latitude: -33.8688, longitude: 151.2093, timeZone: 'Australia/Sydney' },
 ];
 
 function sameCoordinates(first: ObserverLocation, second: ObserverLocation) {
@@ -69,10 +70,10 @@ export function EclipseObserverPanel({ currentDate, location, target, freeLook, 
       <div><span>EARTH SKY VIEW</span><strong>{freeLook ? 'Free camera' : `${target} from Earth`}</strong></div>
       <button onClick={onClose} aria-label="Exit Earth observer view"><X size={17} /></button>
     </div>
-    <p className="observer-time">Simulation time · {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' }).format(currentDate)}</p>
+    <p className="observer-time">Simulation time · {new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: presets[selectedPreset]?.timeZone ?? location.timeZone ?? 'UTC', timeZoneName: 'short' }).format(currentDate)}</p>
     <label className="observer-place"><span><MapPin size={13} /> Viewing location</span><select value={selectedPreset >= 0 ? String(selectedPreset) : 'custom'} onChange={(change) => choosePreset(change.target.value)}>
       {presets.map((preset, index) => <option key={`${preset.label}-${index}`} value={index}>{preset.label}</option>)}
-      <option value="custom">Custom coordinates</option>
+      <option value="custom">{selectedPreset < 0 && location.label !== 'Custom location' ? location.label : 'Custom coordinates'}</option>
     </select></label>
     <label className="observer-target"><span>LOOK AT</span><div><select value={freeLook ? 'free' : target} onChange={(change) => onTargetChange(change.target.value as SkyTarget)}>
       {freeLook && <option value="free" disabled>Free camera</option>}

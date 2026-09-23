@@ -1,10 +1,12 @@
 import {
-  Body, GeoMoon, GeoVector, KM_PER_AU, NextGlobalSolarEclipse, NextLunarEclipse, Search, SearchGlobalSolarEclipse, SearchLunarEclipse, Seasons,
+  Body, GeoMoon, GeoVector, KM_PER_AU, NextGlobalSolarEclipse, NextLunarEclipse, Observer, Search, SearchGlobalSolarEclipse, SearchLocalSolarEclipse, SearchLunarEclipse, Seasons,
 } from 'astronomy-engine';
 import { DAY_MS } from './time';
+import type { ObserverLocation } from './observer';
 
 export type AstronomyEventKind = 'equinox' | 'solstice' | 'solar-eclipse' | 'lunar-eclipse';
-export type AstronomyEvent = { date: Date; kind: AstronomyEventKind; label: string; approximateStart?: boolean };
+export type SolarEclipseObservation = { date: Date; location: ObserverLocation };
+export type AstronomyEvent = { date: Date; kind: AstronomyEventKind; label: string; approximateStart?: boolean; observation?: SolarEclipseObservation };
 export type SolarEclipseStart = { date: Date; approximate: boolean };
 const MINUTE_MS = 60_000;
 const SUN_RADIUS_KM = 695_700;
@@ -32,6 +34,23 @@ export function solarEclipseStart(eclipse: ReturnType<typeof SearchGlobalSolarEc
 
 function capitalize(value: string) { return value.charAt(0).toUpperCase() + value.slice(1); }
 
+function solarEclipseObservation(eclipse: ReturnType<typeof SearchGlobalSolarEclipse>): SolarEclipseObservation | undefined {
+  const peak = eclipse.peak.date;
+  // NASA lists Reykjavík within the August 2026 path of totality; the Sun is well above the horizon there.
+  // https://science.nasa.gov/eclipses/future-eclipses/total-solar-eclipse-on-august-12-2026/
+  const reykjavik = peak.getUTCFullYear() === 2026 && peak.getUTCMonth() === 7 && peak.getUTCDate() === 12 && eclipse.kind === 'total';
+  const location: ObserverLocation | undefined = reykjavik
+    ? { label: 'Reykjavík', latitude: 64.1466, longitude: -21.9426, timeZone: 'Atlantic/Reykjavik' }
+    : eclipse.latitude !== undefined && eclipse.longitude !== undefined
+      ? { label: 'Eclipse center', latitude: eclipse.latitude, longitude: eclipse.longitude }
+      : undefined;
+  if (!location) return undefined;
+  const local = SearchLocalSolarEclipse(eclipse.peak.AddDays(-1), new Observer(location.latitude, location.longitude, 0));
+  if (local.kind !== eclipse.kind || local.peak.altitude <= 0 || Math.abs(local.peak.time.date.getTime() - peak.getTime()) > DAY_MS) return undefined;
+  // Give the observer a moment before first contact so the whole local eclipse can play out.
+  return { date: new Date(local.partial_begin.time.date.getTime() - 5 * MINUTE_MS), location };
+}
+
 export function eventsForYear(year: number): AstronomyEvent[] {
   const seasons = Seasons(year);
   const events: AstronomyEvent[] = [
@@ -45,7 +64,7 @@ export function eventsForYear(year: number): AstronomyEvent[] {
   let solar = SearchGlobalSolarEclipse(searchStart);
   while (solar.peak.date < searchEnd) {
     const start = solarEclipseStart(solar);
-    if (start.date.getFullYear() === year) events.push({ date: start.date, kind: 'solar-eclipse', label: `${capitalize(solar.kind)} solar eclipse`, approximateStart: start.approximate });
+    if (start.date.getFullYear() === year) events.push({ date: start.date, kind: 'solar-eclipse', label: `${capitalize(solar.kind)} solar eclipse`, approximateStart: start.approximate, observation: solarEclipseObservation(solar) });
     solar = NextGlobalSolarEclipse(solar.peak);
   }
   let lunar = SearchLunarEclipse(searchStart);

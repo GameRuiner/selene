@@ -2,16 +2,16 @@
 
 A local, interactive WebGL solar system built with Three.js, React, TypeScript, and Vinext.
 
-The project is intentionally configured for static hosting. Keep new features browser-side unless a server-backed architecture is explicitly requested.
+The project runs locally as a browser-side WebGL app. Keep new features browser-side unless a server-backed architecture is explicitly requested.
 
 ## Run locally
 
 ```sh
 npm install
-npm run dev
+npm run dev -- --port 3000
 ```
 
-Open the local URL printed by the server. Requires Node.js 22.13+ and a browser with WebGL 2 / hardware acceleration enabled.
+Open [http://localhost:3000](http://localhost:3000). Requires Node.js 22.13+ and a browser with WebGL 2 / hardware acceleration enabled. This is the development address for future work;
 
 ## Static build and preview
 
@@ -24,7 +24,7 @@ The publishable site is **`dist/client/`**, containing HTML, JavaScript, CSS, an
 
 Vinext may produce `dist/server/` as an intermediate for prerendering. It is not part of the static site and must not be uploaded. No Worker, database, or server runtime is required for the exported site.
 
-For a future Cloudflare Pages deployment, use build command `npm run build` and output directory `dist/client` (Node.js 22.13 or newer). Alternatively, upload only `dist/client` as a prebuilt site. No deployment is performed by the build or preview commands.
+The build and preview commands run locally; neither publishes the site.
 
 ## Explore
 

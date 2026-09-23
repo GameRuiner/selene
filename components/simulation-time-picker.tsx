@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, RotateCcw } from 'lucide-react';
 import { eventsForYear, sameLocalDay, type AstronomyEvent } from '@/lib/astronomy/events';
 import { Calendar } from '@/components/ui/calendar';
@@ -9,13 +9,14 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 type SimulationTimePickerProps = {
   value: Date;
   onChange: (date: Date) => void;
+  onEclipseView: (event: AstronomyEvent) => void;
 };
 
 function timeInputValue(date: Date) {
   return [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':');
 }
 
-const CalendarEditor = memo(function CalendarEditor({ initialValue, onChange }: { initialValue: Date; onChange: (date: Date) => void }) {
+const CalendarEditor = memo(function CalendarEditor({ initialValue, onChange, onEventTime }: { initialValue: Date; onChange: (date: Date) => void; onEventTime: (event: AstronomyEvent) => void }) {
   const [month, setMonth] = useState(() => new Date(initialValue.getFullYear(), initialValue.getMonth(), 1));
   const [pickerDate, setPickerDate] = useState(() => initialValue);
   const [captionPicker, setCaptionPicker] = useState<'month' | 'year' | null>(null);
@@ -23,6 +24,12 @@ const CalendarEditor = memo(function CalendarEditor({ initialValue, onChange }: 
   const events = useMemo(() => eventsForYear(month.getFullYear()), [month]);
   const selectedEvents = events.filter((event) => sameLocalDay(event.date, pickerDate));
   const eventDates = (kind: AstronomyEvent['kind']) => events.filter((event) => event.kind === kind).map((event) => event.date);
+
+  const selectEvent = (event: AstronomyEvent) => {
+    const next = event.observation?.date ?? event.date;
+    setPickerDate(next);
+    onEventTime(event);
+  };
 
   const selectDay = (day: Date | undefined) => {
     if (!day) return;
@@ -55,6 +62,7 @@ const CalendarEditor = memo(function CalendarEditor({ initialValue, onChange }: 
       <div className="time-popover-heading"><span>DATE & TIME</span><button onClick={setNow}><RotateCcw size={13} /> Set to now</button></div>
       <Calendar
         mode="single"
+        fixedWeeks
         month={month}
         onMonthChange={(nextMonth) => {
           setMonth(nextMonth);
@@ -93,25 +101,41 @@ const CalendarEditor = memo(function CalendarEditor({ initialValue, onChange }: 
         <span><i className="equinox" /> Equinox</span><span><i className="solstice" /> Solstice</span>
         <span><i className="solar-eclipse" /> Solar eclipse (global)</span><span><i className="lunar-eclipse" /> Lunar eclipse</span>
       </div>
-      {selectedEvents.length > 0 && <div className="selected-date-events" aria-live="polite">
+      <div className="selected-date-events" aria-live="polite">
         {selectedEvents.map((event) => {
           const isEclipse = event.kind === 'solar-eclipse' || event.kind === 'lunar-eclipse';
-          const action = isEclipse ? `the ${event.approximateStart ? 'approximate ' : ''}start of ` : '';
-          const timePrefix = event.approximateStart ? 'Approx. start ' : isEclipse ? 'Starts ' : '';
+          const observation = event.kind === 'solar-eclipse' ? event.observation : undefined;
+          const action = observation ? `${event.label} from ${observation.location.label}, five minutes before local first contact` : `Set simulation to ${isEclipse ? `the ${event.approximateStart ? 'approximate ' : ''}start of ` : ''}${event.label}`;
+          const timePrefix = observation ? 'View from ' : event.approximateStart ? 'Approx. start ' : isEclipse ? 'Starts ' : '';
+          const eventTime = observation
+            ? new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', timeZone: observation.location.timeZone ?? 'UTC', timeZoneName: 'short' }).format(observation.date)
+            : new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(event.date);
 
           return <div className="selected-date-event" key={`${event.kind}-${event.date.toISOString()}`}>
-            <button className="event-time-button" onClick={() => { setPickerDate(event.date); onChange(event.date); }} aria-label={`Set simulation to ${action}${event.label}`}><i className={event.kind} /><span>{event.label}</span><time>{timePrefix}{new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(event.date)}</time></button>
+            <button className="event-time-button" onClick={() => selectEvent(event)} aria-label={observation ? `View ${action}` : action}><i className={event.kind} /><span>{event.label}</span><time>{timePrefix}{eventTime}{observation ? ` · ${observation.location.label}` : ''}</time></button>
           </div>;
         })}
-      </div>}
+      </div>
       <label className="simulation-time-input"><span>TIME</span><input type="time" step="1" value={timeInputValue(pickerDate)} onChange={(event) => selectTime(event.target.value)} /></label>
     </>
   );
 });
 
-export function SimulationTimePicker({ value, onChange }: SimulationTimePickerProps) {
+export function SimulationTimePicker({ value, onChange, onEclipseView }: SimulationTimePickerProps) {
   const [open, setOpen] = useState(false);
   const [editorValue, setEditorValue] = useState(() => value);
+  const onChangeRef = useRef(onChange);
+  const onEclipseViewRef = useRef(onEclipseView);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+    onEclipseViewRef.current = onEclipseView;
+  }, [onChange, onEclipseView]);
+  const changeEditorDate = useCallback((date: Date) => onChangeRef.current(date), []);
+  const selectEventTime = useCallback((event: AstronomyEvent) => {
+    if (event.kind === 'solar-eclipse' && event.observation) onEclipseViewRef.current(event);
+    else onChangeRef.current(event.date);
+    setOpen(false);
+  }, []);
   const dateLabel = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(value);
   const timeLabel = new Intl.DateTimeFormat(undefined, { timeStyle: 'medium' }).format(value);
 
@@ -127,7 +151,7 @@ export function SimulationTimePicker({ value, onChange }: SimulationTimePickerPr
         <time dateTime={value.toISOString()}>{timeLabel}</time>
       </PopoverTrigger>
       <PopoverContent className="simulation-time-popover" align="center" side="top" sideOffset={10}>
-        {open && <CalendarEditor initialValue={editorValue} onChange={onChange} />}
+        {open && <CalendarEditor initialValue={editorValue} onChange={changeEditorDate} onEventTime={selectEventTime} />}
       </PopoverContent>
     </Popover>
   );

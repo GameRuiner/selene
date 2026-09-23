@@ -109,11 +109,11 @@ dt { color: #8590a0; } dd { margin: 0; color: #d4dae4; text-align: right; font-v
 .calendar-legend .solstice, .selected-date-events .solstice { background: #e7c36c; }
 .calendar-legend .solar-eclipse, .selected-date-events .solar-eclipse { background: #ef8a55; }
 .calendar-legend .lunar-eclipse, .selected-date-events .lunar-eclipse { background: #a996e8; }
-.selected-date-events { display: grid; gap: 6px; padding: 8px 5px 2px; }
+.selected-date-events { display: grid; align-content: start; gap: 6px; height: 52px; overflow-y: auto; padding: 8px 5px 2px; }
 .selected-date-event { display: grid; grid-template-columns: 1fr; align-items: stretch; overflow: hidden; border-radius: 5px; background: #ffffff05; }
 .selected-date-events button { display: flex; align-items: center; gap: 7px; border: 0; color: #d9dfd0; font-size: 11px; }
 .selected-date-events button:hover { background: #ffffff0c; }
-.event-time-button { min-width: 0; padding: 6px; background: transparent; text-align: left; }
+.event-time-button { min-width: 0; flex-wrap: wrap; padding: 6px; background: transparent; text-align: left; }
 .selected-date-events time { margin-left: auto; color: #929cad; font-variant-numeric: tabular-nums; }
 .simulation-time-input { display: flex; align-items: center; justify-content: space-between; padding: 8px 5px 1px; color: #8994a4; font-size: 11px; letter-spacing: 0.1em; }
 .simulation-time-input input { width: 126px; padding: 5px 7px; border: 1px solid #ffffff1f; border-radius: 5px; background: #ffffff08; color: #dce4d2; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; color-scheme: dark; }

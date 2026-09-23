@@ -98,7 +98,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   const exactMoonPosition = (target: THREE.Vector3) => celestialMapper.moonPosition(simulationDaysToDate(days), target);
   const exactBodyPosition = (body: AstronomyBody, target: THREE.Vector3) => celestialMapper.bodyPosition(body, simulationDaysToDate(days), target);
   const astronomyBodyForObserverTarget = (name: string) => SKY_TARGETS.includes(name as SkyTarget) ? astronomyBodyForTarget(name as SkyTarget) : undefined;
-  observerView = createEarthObserverView({ scene, host, resources, camera, controls, bodyScene, mapper: celestialMapper, sceneNorth, origin, width: () => width, height: () => height, onFreeLook: onObserverFreeLook, lunarEclipseStrength: () => lunarShadowUniforms.uEclipseStrength.value });
+  observerView = createEarthObserverView({ scene, host, resources, starMaterial, realScale: () => realScale, camera, controls, bodyScene, mapper: celestialMapper, sceneNorth, origin, width: () => width, height: () => height, onFreeLook: onObserverFreeLook, lunarEclipseStrength: () => lunarShadowUniforms.uEclipseStrength.value });
   function focus(name: BodyName | null) {
     if (observerView?.active) {
       observerView.exitForFocus();

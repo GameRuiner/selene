@@ -1,10 +1,10 @@
 import { Body as AstronomyBody, Equator, Horizon, Observer } from 'astronomy-engine';
 
 export type SkyTarget = 'Sun' | 'Moon' | 'Mercury' | 'Venus' | 'Mars' | 'Jupiter' | 'Saturn' | 'Uranus' | 'Neptune';
-export type ObserverLocation = { latitude: number; longitude: number; label: string };
+export type ObserverLocation = { latitude: number; longitude: number; label: string; timeZone?: string };
 export type SkyObservation = { visible: boolean; status: string };
 export const SKY_TARGETS: SkyTarget[] = ['Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune'];
-export const DEFAULT_OBSERVER: ObserverLocation = { label: 'Warsaw', latitude: 52.2297, longitude: 21.0122 };
+export const DEFAULT_OBSERVER: ObserverLocation = { label: 'Warsaw', latitude: 52.2297, longitude: 21.0122, timeZone: 'Europe/Warsaw' };
 const targets: Record<SkyTarget, AstronomyBody> = {
   Sun: AstronomyBody.Sun, Moon: AstronomyBody.Moon, Mercury: AstronomyBody.Mercury, Venus: AstronomyBody.Venus,
   Mars: AstronomyBody.Mars, Jupiter: AstronomyBody.Jupiter, Saturn: AstronomyBody.Saturn, Uranus: AstronomyBody.Uranus, Neptune: AstronomyBody.Neptune,

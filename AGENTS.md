@@ -3,8 +3,9 @@
 ## Project constraints
 
 - Use Node.js 22.13 or newer.
-- Keep the deployed application static and browser-side. `npm run build` must produce the publishable site in `dist/client/`; do not introduce server routes, Workers, databases, or remote runtime assets.
-- Preserve Vinext static export through `next.config.ts`; `dist/server/` may be used during prerendering but is not deployed.
+- Develop and preview locally at `http://localhost:3000` with `npm run dev -- --port 3000`.
+- Keep the application static and browser-side. `npm run build` must produce the site in `dist/client/`; do not introduce server routes, Workers, databases, or remote runtime assets.
+- Preserve Vinext static export through `next.config.ts`; `dist/server/` may be used during prerendering but is not part of the local preview.
 - The scene requires WebGL 2 and hardware acceleration. Preview the static build over HTTP rather than `file://`.
 - Keep runtime textures local.
 
@@ -75,7 +76,7 @@ Vitest is development-only and runs in Node. It must not add a production runtim
 
 ```sh
 npm install
-npm run dev
+npm run dev -- --port 3000
 npm test
 npx tsc --noEmit
 npm run lint
