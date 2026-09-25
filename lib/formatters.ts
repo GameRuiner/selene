@@ -6,5 +6,6 @@ export function formatMass(massKg: number): string {
   return `${new Intl.NumberFormat('en-US', { maximumSignificantDigits: 7 }).format(coefficient)} × 10${power} kg`;
 }
 export function formatKilometers(kilometers: number): string {
+  if (kilometers < 1) return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(kilometers * 1_000)} m`;
   return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(kilometers)} km`;
 }

@@ -13,6 +13,9 @@ import { createBodyScene, updateBodyScene, updateBodyLabels } from './solar-syst
 import { createEarthObserverView, type EarthObserverView } from './solar-system/earth-observer-view';
 import { bindSceneInput } from './solar-system/input-controller';
 import { createMoonOrbitMapper, writeMoonOrbitPath } from './solar-system/moon-orbit';
+import { createApophisSceneMapper, usesFixedApophisFlybyPath } from './solar-system/apophis-path';
+import { apophisEncounterBodyRadius, apophisEncounterDisplayBlend } from './solar-system/apophis-display';
+import { APOPHIS_EPHEMERIS_START, APOPHIS_EPHEMERIS_END } from './astronomy/apophis';
 
 import type { SolarSystem, LandmarkSelection, EarthObserver, SolarSystemOptions } from './solar-system/types';
 export type { SolarSystem, Landmark, LandmarkSelection, EarthObserver, SolarSystemOptions } from './solar-system/types';
@@ -71,9 +74,18 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   const bodyScene = createBodyScene({ scene, host, renderer, resources, realScale: () => realScale, lunarShadowUniforms, focus: (name) => focus(name), onSelect, onLandmarkSelect, onError });
   const { paths, objects, objectByName, orbitLines, earth, moon, refreshOrbitLines } = bodyScene;
   const moonOrbitLine = orbitLines.find(({ body }) => body.name === 'Moon')!.line;
+  const apophisOrbitLine = orbitLines.find(({ body }) => body.name === 'Apophis')!.line;
   let moonOrbitDay = Number.NaN;
+  let apophisOrbitDay = Number.NaN;
+  let apophisOrbitFixed = false;
   const bodyRadius = (body: (typeof objects)[number]['body']) => calculateBodyRadius(body, realScale);
-  const focusCamera = createFocusCameraController({ camera, controls, bodyScene, home, origin, isRealScale: () => realScale, width: () => width, radiusFor: (name) => bodyRadius(objectByName.get(name)!.body) });
+  const focusCamera = createFocusCameraController({ camera, controls, bodyScene, home, origin, isRealScale: () => realScale, width: () => width, radiusFor: (name) => {
+    const body = objectByName.get(name)!.body;
+    const time = simulationDaysToDate(days).getTime();
+    return time >= APOPHIS_EPHEMERIS_START && time <= APOPHIS_EPHEMERIS_END
+      ? apophisEncounterBodyRadius(body, earth.group.position.distanceTo(objectByName.get('Apophis')!.group.position), realScale)
+      : bodyRadius(body);
+  } });
   let lunarCoordinateDay = Number.NaN;
   let cachedLunarPhaseAngle = 0;
   let cachedLunarLatitude = 0;
@@ -99,17 +111,30 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
   const sceneNorth = new THREE.Vector3(0, Math.cos(23.44 * degrees), -Math.sin(23.44 * degrees));
   const celestialMapper = createCelestialMapper({ earthPosition: earth.group.position, sceneNorth, origin, sceneAU });
   const moonOrbitMapper = createMoonOrbitMapper(earth.group.position);
+  const apophisMapper = createApophisSceneMapper();
   const exactMoonPosition = (target: THREE.Vector3) => celestialMapper.moonPosition(simulationDaysToDate(days), target);
   const displayMoonPosition = (target: THREE.Vector3) => moonOrbitMapper.moonPosition(simulationDaysToDate(days), target);
+  const apophisPosition = (target: THREE.Vector3) => apophisMapper.positionAt(simulationDaysToDate(days), earth.group.position, target);
   const exactBodyPosition = (body: AstronomyBody, target: THREE.Vector3) => celestialMapper.bodyPosition(body, simulationDaysToDate(days), target);
   const astronomyBodyForObserverTarget = (name: string) => SKY_TARGETS.includes(name as SkyTarget) ? astronomyBodyForTarget(name as SkyTarget) : undefined;
   observerView = createEarthObserverView({ scene, host, resources, starMaterial, realScale: () => realScale, camera, controls, bodyScene, mapper: celestialMapper, sceneNorth, origin, width: () => width, height: () => height, onFreeLook: onObserverFreeLook, lunarEclipseStrength: () => lunarShadowUniforms.uEclipseStrength.value });
+  function updateBodies() {
+    const earthObserver = observerView!.current;
+    return updateBodyScene(bodyScene, {
+      days, realScale, earthObserver, selected, lunarCoordinates, exactMoonPosition: earthObserver ? exactMoonPosition : displayMoonPosition, apophisPosition, exactBodyPosition,
+      astronomyBodyForTarget: astronomyBodyForObserverTarget,
+      lunarShadowUniforms,
+    });
+  }
   function focus(name: BodyName | null) {
     if (observerView?.active) {
       observerView.exitForFocus();
       updateTouchAction();
     }
     selected = name;
+    // Calendar actions may change the date and focus in the same browser tick.
+    // Frame the new encounter geometry, not positions left from the previous date.
+    updateBodies();
     focusCamera.focus(name);
   }
   function setEarthObserver(next: EarthObserver | null) {
@@ -147,15 +172,22 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
     const elapsed = Math.min((now - previous) / 1000, 0.05); previous = now;
     if (!document.hidden && !options.paused) days += elapsed * options.speed;
     const earthObserver = observerView!.current;
-    const selectedSystem = updateBodyScene(bodyScene, {
-      days, realScale, earthObserver, selected, lunarCoordinates, exactMoonPosition: earthObserver ? exactMoonPosition : displayMoonPosition, exactBodyPosition,
-      astronomyBodyForTarget: astronomyBodyForObserverTarget,
-      lunarShadowUniforms,
-    });
+    const selectedSystem = updateBodies();
     if (options.orbits && !earthObserver && (!Number.isFinite(moonOrbitDay) || Math.abs(days - moonOrbitDay) > 1 / 288)) {
-      writeMoonOrbitPath(simulationDaysToDate(days), moonOrbitMapper, realScale ? null : orbitRadius(moon.body, false), moonOrbitLine.geometry.getAttribute('position') as THREE.BufferAttribute);
+      const date = simulationDaysToDate(days);
+      const displayBlend = date.getTime() >= APOPHIS_EPHEMERIS_START && date.getTime() <= APOPHIS_EPHEMERIS_END
+        ? apophisEncounterDisplayBlend(earth.group.position.distanceTo(objectByName.get('Apophis')!.group.position)) : 1;
+      writeMoonOrbitPath(date, moonOrbitMapper, realScale ? null : orbitRadius(moon.body, false), moonOrbitLine.geometry.getAttribute('position') as THREE.BufferAttribute, displayBlend);
       moonOrbitLine.geometry.computeBoundingSphere();
       moonOrbitDay = days;
+    }
+    const apophisPathDate = simulationDaysToDate(days);
+    const fixedApophisPath = usesFixedApophisFlybyPath(apophisPathDate);
+    if (options.orbits && !earthObserver && (!Number.isFinite(apophisOrbitDay) || fixedApophisPath !== apophisOrbitFixed || (!fixedApophisPath && Math.abs(days - apophisOrbitDay) > 1 / 288))) {
+      apophisMapper.writePath(apophisPathDate, realScale, apophisOrbitLine.geometry.getAttribute('position') as THREE.BufferAttribute);
+      apophisOrbitLine.geometry.computeBoundingSphere();
+      apophisOrbitDay = days;
+      apophisOrbitFixed = fixedApophisPath;
     }
     sunGlow.scale.setScalar(bodyRadius(objects[0].body) / objects[0].body.radius);
     sunGlow.visible = !observerView!.active;
@@ -181,6 +213,7 @@ export function createSolarSystem(host: HTMLDivElement, onSelect: (name: BodyNam
       if (next.realScale !== options.realScale) {
         realScale = next.realScale;
         moonOrbitDay = Number.NaN;
+        apophisOrbitDay = Number.NaN;
         refreshOrbitLines();
         if (observerView!.active) {
           camera.near = Math.max(bodyRadius(earth.body) * 0.0005, 0.000000001);

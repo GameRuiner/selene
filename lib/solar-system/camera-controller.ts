@@ -4,11 +4,14 @@ import type { BodyName } from '../solar-data';
 import type { BodyScene } from './body-scene';
 
 export type FocusCameraPlan = { near: number; distance: number; transitionThreshold: number; minDistance: number; offset: [number, number, number] };
-export function calculateFocusCameraPlan(input: { selected: boolean; realScale: boolean; radius: number; displayRadius: number; currentDistance: number; homeVector: [number, number, number]; mobile: boolean }): FocusCameraPlan {
-  const { selected, realScale, radius, displayRadius, currentDistance, homeVector, mobile } = input;
+export function calculateFocusCameraPlan(input: { selected: boolean; realScale: boolean; radius: number; displayRadius: number; currentDistance: number; homeVector: [number, number, number]; mobile: boolean; encounterSeparation?: number }): FocusCameraPlan {
+  const { selected, realScale, radius, displayRadius, currentDistance, homeVector, mobile, encounterSeparation } = input;
   const homeDistance = Math.hypot(...homeVector);
-  const near = selected && realScale ? Math.max(radius * 0.08, 0.000000001) : 0.1;
-  const preferredDistance = selected ? realScale ? Math.max(radius * 8, 0.000001) : Math.max(displayRadius * 7, 4) : homeDistance;
+  const near = selected && (realScale || encounterSeparation !== undefined) ? Math.max(radius * 0.08, 0.000000001) : 0.1;
+  let preferredDistance = selected ? realScale ? Math.max(radius * 8, 0.000001) : Math.max(displayRadius * 7, 4) : homeDistance;
+  if (selected && !realScale && encounterSeparation !== undefined) {
+    preferredDistance = Math.min(preferredDistance, Math.max(encounterSeparation * 5, radius * 8));
+  }
   const distance = selected ? Math.min(currentDistance, preferredDistance) : homeDistance;
   const transitionThreshold = Math.min(0.03, Math.max(distance * 0.005, 0.000000001));
   const minDistance = selected ? Math.max(radius * 1.8, near * 2.5) : 5;
@@ -42,11 +45,20 @@ export function createFocusCameraController(options: {
   let transition = false;
   let transitionStartedAt = 0;
   let transitionThreshold = 0.03;
+  let focusedName: BodyName | null = null;
 
   function focus(name: BodyName | null) {
+    focusedName = name;
     const item = name ? bodyScene.objectByName.get(name) : undefined;
     const radius = item ? radiusFor(item.body.name) : 0;
-    const plan = calculateFocusCameraPlan({ selected: Boolean(item), realScale: isRealScale(), radius, displayRadius: item?.body.radius ?? 0, currentDistance: camera.position.distanceTo(controls.target), homeVector: [home.x, home.y, home.z], mobile: width() < 700 });
+    let encounterSeparation: number | undefined;
+    if (!isRealScale() && item && (name === 'Earth' || name === 'Moon' || name === 'Apophis') && radius < item.body.radius) {
+      encounterSeparation = name === 'Moon' ? 0
+        : bodyScene.earth.group.position.distanceTo(bodyScene.objectByName.get('Apophis')!.group.position);
+      // Earth frames the lunar system; Apophis frames the closer Earth flyby.
+      if (name === 'Earth') encounterSeparation = Math.max(encounterSeparation, bodyScene.earth.group.position.distanceTo(bodyScene.moon.group.position));
+    }
+    const plan = calculateFocusCameraPlan({ selected: Boolean(item), realScale: isRealScale(), radius, displayRadius: item?.body.radius ?? 0, currentDistance: camera.position.distanceTo(controls.target), homeVector: [home.x, home.y, home.z], mobile: width() < 700, encounterSeparation });
     camera.near = plan.near;
     camera.updateProjectionMatrix();
     transitionThreshold = plan.transitionThreshold;
@@ -58,6 +70,13 @@ export function createFocusCameraController(options: {
   }
 
   function update(target: THREE.Vector3 | null, elapsed: number, now: number) {
+    if (!isRealScale() && (focusedName === 'Earth' || focusedName === 'Moon' || focusedName === 'Apophis')) {
+      const item = bodyScene.objectByName.get(focusedName)!;
+      const radius = radiusFor(focusedName);
+      const near = radius < item.body.radius ? Math.max(radius * 0.08, 0.000000001) : 0.1;
+      if (camera.near !== near) { camera.near = near; camera.updateProjectionMatrix(); }
+      controls.minDistance = Math.max(radius * 1.8, near * 2.5);
+    }
     desired.copy(target ?? origin);
     if (transition) {
       const factor = 1 - Math.exp(-elapsed * 5);

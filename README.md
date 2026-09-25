@@ -29,11 +29,15 @@ The build and preview commands run locally; neither publishes the site.
 ## Explore
 
 - Drag to orbit the camera; scroll or pinch to zoom.
-- Select the Sun, a planet, or the Moon in the object list or in the scene to follow it.
+- Select the Sun, a planet, the Moon, or Apophis in the object list or in the scene to follow it.
 - Select Earth for a close view of Earth and its orbiting Moon.
 - Pause, adjust simulated days per second, toggle labels and orbit paths, or reset the simulation.
 
 This is an illustrative model: body sizes and orbital distances are compressed independently in the default view. Paths use eccentricity, orbital inclination, and relative period; orbital positions are simplified, with exact astronomy-engine positions used for selected Earth-observer views. Axial rotation is stylized except for the tidally locked Moon. It is not a full ephemeris or gravitational simulation.
+
+Apophis uses bundled, offline JPL Horizons positions from 2026 through 2031, sampled densely around the April 2029 Earth flyby. Both views preserve the encounter distance and timing. Near Earth, the default view smoothly reduces Earth and the Moon to physical sizes and restores the Moon's physical distance; Apophis remains an enlarged marker without moving its trajectory. The Moon and Apophis share the same geometric J2000 coordinate frame. From the whole-system view, select Earth to frame the lunar system or Apophis to frame the close flyby; an existing closer user zoom is preserved. True scale uses all bodies' physical sizes. Outside the bundled range, Apophis falls back to a two-body orbit and is only illustrative.
+
+The calendar marks Apophis's April 13, 2029 close approach (21:46 UTC, displayed on its local calendar date). Clicking the event time starts a six-hour lead-in at 15 simulated minutes per second and focuses Apophis in the 3D view. Clicking the day alone keeps the calendar open, as with eclipses.
 
 ## Project structure
 

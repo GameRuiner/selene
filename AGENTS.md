@@ -41,6 +41,8 @@ Vitest is development-only and runs in Node. It must not add a production runtim
 - Keep reusable vectors and objects outside the animation callback.
 - Preserve J2000 conversion, Kepler iteration count, scene-scale formulas, and orbital rotation order: periapsis, inclination, ascending node.
 - Keep calendar eclipse matching, scene eclipse alerts, lunar surface shadow, and observer visuals separate because their thresholds have distinct meanings.
+- Apophis uses bundled 2026–2031 JPL Horizons vectors with dense samples around the 2029 flyby. Outside that range it falls back to June 2026 osculating elements. Keep the runtime offline and regenerate the vector table only with `scripts/generate-apophis-ephemeris.mjs`.
+- Never offset or stretch Apophis positions to clear Earth's enlarged mesh. Reduce the encounter meshes instead. Recenter may use encounter framing and a smaller near plane for these reduced meshes; preserve the closer-camera rule and selected-body following.
 - Calendar event day matching uses local calendar dates; do not change it to UTC.
 - Preserve camera near plane, preferred distance, closer-camera behavior, transition threshold, mobile overview offset, and selected-body following.
 - User camera input cancels active transitions. Observer dragging switches to free look once for each transition.

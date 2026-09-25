@@ -12,7 +12,7 @@ import { type BodyName } from '@/lib/solar-data';
 import { createSolarSystem, type LandmarkSelection, type SolarSystem } from '@/lib/solar-system';
 import { registerExplorerTool } from '@/lib/explorer-tool';
 import { DEFAULT_OBSERVER, skyObservation, type ObserverLocation, type SkyTarget } from '@/lib/astronomy/observer';
-import type { AstronomyEvent } from '@/lib/astronomy/events';
+import { eventPlaybackDate, type AstronomyEvent } from '@/lib/astronomy/events';
 
 export default function Home() {
   const host = useRef<HTMLDivElement>(null);
@@ -120,6 +120,23 @@ export default function Home() {
     engine.current?.setOptions({ paused: false, speed: SPEED_STOPS[1].daysPerSecond, orbits, labels, realScale: true });
     engine.current?.zoomEarthObserver(-43);
   };
+  const viewCalendarEvent = (event: AstronomyEvent) => {
+    if (event.kind === 'solar-eclipse' && event.observation) {
+      viewSolarEclipse(event);
+      return;
+    }
+    setSimulationDate(eventPlaybackDate(event));
+    if (event.kind === 'asteroid-flyby') {
+      stopSkyView();
+      setRealScale(false);
+      setPaused(false);
+      setSpeedIndex(2);
+      setOrbits(true);
+      setLabels(true);
+      engine.current?.setOptions({ paused: false, speed: SPEED_STOPS[2].daysPerSecond, orbits: true, labels: true, realScale: false });
+      focus('Apophis');
+    }
+  };
   const displayedObserverStatus = skyObservation(simulationNow, observerLocation, observerTarget);
 
   return (
@@ -158,11 +175,11 @@ export default function Home() {
         <button className="earth-shortcut" onClick={() => focus('Earth')}>Explore Earth & Moon <ArrowUpRight size={16} /></button>
       </section>
       <ObjectBrowser selected={selected} onSelect={focus} />
-      <BodyDetails selected={selected} moonPhase={moonPhase} eclipse={eclipse} observerActive={observerActive} onViewSky={viewSkyFromEarth} onFocus={focus} />
+      <BodyDetails selected={selected} simulationNow={simulationNow} moonPhase={moonPhase} eclipse={eclipse} observerActive={observerActive} onViewSky={viewSkyFromEarth} onFocus={focus} />
       {error && <div className="scene-message" role="alert">{error}</div>}
       {!ready && !error && <output className="scene-message">Preparing your solar system…</output>}
       <footer className="bottom-area">
-        <SimulationControls paused={paused} speedIndex={speedIndex} setPaused={setPaused} setSpeedIndex={setSpeedIndex} simulationNow={simulationNow} setSimulationDate={setSimulationDate} onEclipseView={viewSolarEclipse} ready={ready} orbits={orbits} labels={labels} realScale={realScale} observerActive={observerActive} setOrbits={setOrbits} setLabels={setLabels} setRealScale={setRealScale} reset={() => { const now = new Date(); focus(null); setPaused(false); setSpeedIndex(0); setSimulationNow(now); setOrbits(true); setLabels(true); setRealScale(false); engine.current?.reset(); }} />
+        <SimulationControls paused={paused} speedIndex={speedIndex} setPaused={setPaused} setSpeedIndex={setSpeedIndex} simulationNow={simulationNow} setSimulationDate={setSimulationDate} onEventView={viewCalendarEvent} ready={ready} orbits={orbits} labels={labels} realScale={realScale} observerActive={observerActive} setOrbits={setOrbits} setLabels={setLabels} setRealScale={setRealScale} reset={() => { const now = new Date(); focus(null); setPaused(false); setSpeedIndex(0); setSimulationNow(now); setOrbits(true); setLabels(true); setRealScale(false); engine.current?.reset(); }} />
         <div className="footer-meta"><span>DRAG TO ORBIT <b>·</b> SCROLL TO ZOOM <b>·</b> CLICK TO EXPLORE</span><span>WEBGL <i /> LIVE SIMULATION</span></div>
       </footer>
     </main>

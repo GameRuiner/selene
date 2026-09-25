@@ -17,4 +17,20 @@ describe('focus camera planning', () => {
     expect(plan.distance).toBeCloseTo(0.0032);
     expect(plan.transitionThreshold).toBeCloseTo(0.000016);
   });
+  it('frames reduced encounter meshes while preserving a closer user zoom', () => {
+    const input = { selected: true, realScale: false, radius: 0.00006, displayRadius: 0.13, currentDistance: 4, homeVector: [0, 64, 89] as [number, number, number], mobile: false, encounterSeparation: 0.00356 };
+    const framed = calculateFocusCameraPlan(input);
+    expect(framed.distance).toBeGreaterThan(input.encounterSeparation * 4.5);
+    expect(framed.distance).toBeLessThan(input.encounterSeparation * 5.5);
+    expect(framed.near).toBeLessThan(input.radius);
+    expect(calculateFocusCameraPlan({ ...input, currentDistance: 0.005 }).distance).toBe(0.005);
+  });
+  it('allows a close-up of the reduced Moon without clipping it', () => {
+    const input = { selected: true, realScale: false, radius: 0.000163, displayRadius: 0.245, currentDistance: 4, homeVector: [0, 64, 89] as [number, number, number], mobile: false, encounterSeparation: 0 };
+    const plan = calculateFocusCameraPlan(input);
+    expect(plan.distance).toBeCloseTo(input.radius * 8);
+    expect(plan.near).toBeLessThan(input.radius);
+    expect(plan.minDistance).toBeCloseTo(input.radius * 1.8);
+    expect(calculateFocusCameraPlan({ ...input, currentDistance: 0.0005 }).distance).toBe(0.0005);
+  });
 });

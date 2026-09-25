@@ -13,13 +13,13 @@ export const SPEED_STOPS = [
   { daysPerSecond: 2, label: '2 DAYS / SEC' }, { daysPerSecond: 5, label: '5 DAYS / SEC' }, { daysPerSecond: 12, label: '12 DAYS / SEC' },
   { daysPerSecond: 25, label: '25 DAYS / SEC' }, { daysPerSecond: 50, label: '50 DAYS / SEC' }, { daysPerSecond: 100, label: '100 DAYS / SEC' },
 ] as const;
-export type SimulationControlsProps = { paused: boolean; speedIndex: number; setPaused: (value: boolean) => void; setSpeedIndex: (value: number) => void; simulationNow: Date; setSimulationDate: (date: Date) => void; onEclipseView: (event: AstronomyEvent) => void; ready: boolean; orbits: boolean; labels: boolean; realScale: boolean; observerActive: boolean; setOrbits: (value: boolean) => void; setLabels: (value: boolean) => void; setRealScale: (value: boolean) => void; reset: () => void };
+export type SimulationControlsProps = { paused: boolean; speedIndex: number; setPaused: (value: boolean) => void; setSpeedIndex: (value: number) => void; simulationNow: Date; setSimulationDate: (date: Date) => void; onEventView: (event: AstronomyEvent) => void; ready: boolean; orbits: boolean; labels: boolean; realScale: boolean; observerActive: boolean; setOrbits: (value: boolean) => void; setLabels: (value: boolean) => void; setRealScale: (value: boolean) => void; reset: () => void };
 export function SimulationControls(props: SimulationControlsProps) {
-  const { paused, speedIndex, setPaused, setSpeedIndex, simulationNow, setSimulationDate, onEclipseView, ready, orbits, labels, realScale, observerActive, setOrbits, setLabels, setRealScale, reset } = props;
+  const { paused, speedIndex, setPaused, setSpeedIndex, simulationNow, setSimulationDate, onEventView, ready, orbits, labels, realScale, observerActive, setOrbits, setLabels, setRealScale, reset } = props;
   return <div className="controls-bar">
     <button className="play-button" aria-label={paused ? 'Resume simulation' : 'Pause simulation'} onClick={() => setPaused(!paused)}>{paused ? <Play size={18} fill="currentColor" /> : <Pause size={18} fill="currentColor" />}</button>
     <div className="speed-control"><div><span id="speed-label">TIME SPEED</span><output>{SPEED_STOPS[speedIndex].label}</output></div><Slider aria-labelledby="speed-label" aria-valuetext={SPEED_STOPS[speedIndex].label} value={[speedIndex]} min={0} max={SPEED_STOPS.length - 1} step={1} onValueChange={(value) => setSpeedIndex(Array.isArray(value) ? value[0] : value)} /></div>
-    {ready ? <SimulationTimePicker value={simulationNow} onChange={setSimulationDate} onEclipseView={onEclipseView} /> : <div className="simulation-time-placeholder"><span>TIME</span><strong>Preparing…</strong></div>}
+    {ready ? <SimulationTimePicker value={simulationNow} onChange={setSimulationDate} onEventView={onEventView} /> : <div className="simulation-time-placeholder"><span>TIME</span><strong>Preparing…</strong></div>}
     <div className="control-divider" />
     <div className="toggle-control"><label htmlFor="orbit-toggle">Orbits</label><Switch id="orbit-toggle" checked={orbits} onCheckedChange={setOrbits} aria-label="Show orbits" /></div>
     <div className="toggle-control"><label htmlFor="label-toggle">Labels</label><Switch id="label-toggle" checked={labels} onCheckedChange={setLabels} aria-label="Show labels" /></div>

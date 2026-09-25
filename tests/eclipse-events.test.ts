@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eventsForYear, sameLocalDay } from '../lib/astronomy/events';
+import { eventPlaybackDate, eventsForYear, sameLocalDay } from '../lib/astronomy/events';
 import { moonPhaseFromAngle, lunarEclipseStrength, classifySceneEclipse } from '../lib/astronomy/moon';
 import * as THREE from 'three';
 import { Observer, SearchLocalSolarEclipse } from 'astronomy-engine';
@@ -9,6 +9,21 @@ import { bodyRadius, initialOrbitalPhase, orbitalAngle, orbitalPosition } from '
 import { createCelestialMapper } from '../lib/solar-system/celestial-mapper';
 
 describe('astronomy events and lunar state', () => {
+  it('lists the Apophis encounter once with a six-hour playback lead-in', () => {
+    const events = eventsForYear(2029);
+    const flybys = events.filter((event) => event.kind === 'asteroid-flyby');
+    expect(flybys).toHaveLength(1);
+    const flyby = flybys[0];
+    expect(flyby.label).toBe('Apophis Earth flyby');
+    expect(flyby.date.toISOString()).toBe('2029-04-13T21:46:00.000Z');
+    expect(eventPlaybackDate(flyby).toISOString()).toBe('2029-04-13T15:46:00.000Z');
+    expect(flyby.date.getTime() - eventPlaybackDate(flyby).getTime()).toBe(6 * 3_600_000);
+    expect(sameLocalDay(flyby.date, new Date(flyby.date.getFullYear(), flyby.date.getMonth(), flyby.date.getDate()))).toBe(true);
+    expect(events.every((event, index) => index === 0 || events[index - 1].date <= event.date)).toBe(true);
+    for (const year of [2028, 2030]) expect(eventsForYear(year).some((event) => event.kind === 'asteroid-flyby')).toBe(false);
+    const equinox = events.find((event) => event.kind === 'equinox')!;
+    expect(eventPlaybackDate(equinox)).toBe(equinox.date);
+  });
   it('names cardinal lunar phases and classifies aligned scene eclipses', () => {
     expect([0, Math.PI / 2, Math.PI, Math.PI * 1.5].map((angle) => moonPhaseFromAngle(angle).name)).toEqual(['New Moon', 'First Quarter', 'Full Moon', 'Last Quarter']);
     expect(classifySceneEclipse(new THREE.Vector3(2, 0, 0), new THREE.Vector3(1, 0, 0))?.type).toBe('Solar eclipse');
@@ -35,6 +50,7 @@ describe('astronomy events and lunar state', () => {
     const location = event!.observation!.location;
     const local = SearchLocalSolarEclipse(new Date('2026-08-01T00:00:00Z'), new Observer(location.latitude, location.longitude, 0));
     expect(event!.observation!.date.getTime()).toBe(local.partial_begin.time.date.getTime() - 5 * 60_000);
+    expect(eventPlaybackDate(event!).getTime()).toBe(local.partial_begin.time.date.getTime() - 5 * 60_000);
     expect(event!.observation!.date.getTime()).toBeLessThan(local.peak.time.date.getTime());
     expect(local.partial_end.time.date.getTime()).toBeGreaterThan(local.peak.time.date.getTime());
     expect(Math.abs(local.peak.time.date.getTime() - Date.parse('2026-08-12T17:48:30Z'))).toBeLessThan(120_000);

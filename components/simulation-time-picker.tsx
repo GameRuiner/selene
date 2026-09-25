@@ -2,14 +2,14 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, RotateCcw } from 'lucide-react';
-import { eventsForYear, sameLocalDay, type AstronomyEvent } from '@/lib/astronomy/events';
+import { eventPlaybackDate, eventsForYear, sameLocalDay, type AstronomyEvent } from '@/lib/astronomy/events';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 type SimulationTimePickerProps = {
   value: Date;
   onChange: (date: Date) => void;
-  onEclipseView: (event: AstronomyEvent) => void;
+  onEventView: (event: AstronomyEvent) => void;
 };
 
 function timeInputValue(date: Date) {
@@ -26,7 +26,7 @@ const CalendarEditor = memo(function CalendarEditor({ initialValue, onChange, on
   const eventDates = (kind: AstronomyEvent['kind']) => events.filter((event) => event.kind === kind).map((event) => event.date);
 
   const selectEvent = (event: AstronomyEvent) => {
-    const next = event.observation?.date ?? event.date;
+    const next = eventPlaybackDate(event);
     setPickerDate(next);
     onEventTime(event);
   };
@@ -89,30 +89,34 @@ const CalendarEditor = memo(function CalendarEditor({ initialValue, onChange, on
           solstice: eventDates('solstice'),
           solarEclipse: eventDates('solar-eclipse'),
           lunarEclipse: eventDates('lunar-eclipse'),
+          asteroidFlyby: eventDates('asteroid-flyby'),
         }}
         modifiersClassNames={{
           equinox: 'calendar-equinox',
           solstice: 'calendar-solstice',
           solarEclipse: 'calendar-solar-eclipse',
           lunarEclipse: 'calendar-lunar-eclipse',
+          asteroidFlyby: 'calendar-asteroid-flyby',
         }}
       />
       <div className="calendar-legend" aria-label="Astronomical event legend">
         <span><i className="equinox" /> Equinox</span><span><i className="solstice" /> Solstice</span>
         <span><i className="solar-eclipse" /> Solar eclipse (global)</span><span><i className="lunar-eclipse" /> Lunar eclipse</span>
+        <span><i className="asteroid-flyby" /> Asteroid flyby</span>
       </div>
       <div className="selected-date-events" aria-live="polite">
         {selectedEvents.map((event) => {
           const isEclipse = event.kind === 'solar-eclipse' || event.kind === 'lunar-eclipse';
           const observation = event.kind === 'solar-eclipse' ? event.observation : undefined;
-          const action = observation ? `${event.label} from ${observation.location.label}, five minutes before local first contact` : `Set simulation to ${isEclipse ? `the ${event.approximateStart ? 'approximate ' : ''}start of ` : ''}${event.label}`;
-          const timePrefix = observation ? 'View from ' : event.approximateStart ? 'Approx. start ' : isEclipse ? 'Starts ' : '';
+          const isFlyby = event.kind === 'asteroid-flyby';
+          const action = isFlyby ? `View ${event.label}, six hours before closest approach` : observation ? `${event.label} from ${observation.location.label}, five minutes before local first contact` : `Set simulation to ${isEclipse ? `the ${event.approximateStart ? 'approximate ' : ''}start of ` : ''}${event.label}`;
+          const timePrefix = observation || isFlyby ? 'View from ' : event.approximateStart ? 'Approx. start ' : isEclipse ? 'Starts ' : '';
           const eventTime = observation
             ? new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', timeZone: observation.location.timeZone ?? 'UTC', timeZoneName: 'short' }).format(observation.date)
-            : new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(event.date);
+            : new Intl.DateTimeFormat(undefined, { timeStyle: 'short', ...(!sameLocalDay(event.date, eventPlaybackDate(event)) ? { dateStyle: 'medium' as const } : {}) }).format(eventPlaybackDate(event));
 
           return <div className="selected-date-event" key={`${event.kind}-${event.date.toISOString()}`}>
-            <button className="event-time-button" onClick={() => selectEvent(event)} aria-label={observation ? `View ${action}` : action}><i className={event.kind} /><span>{event.label}</span><time>{timePrefix}{eventTime}{observation ? ` · ${observation.location.label}` : ''}</time></button>
+            <button className="event-time-button" onClick={() => selectEvent(event)} aria-label={observation ? `View ${action}` : action}><i className={event.kind} /><span>{event.label}</span><time>{timePrefix}{eventTime}{observation ? ` · ${observation.location.label}` : isFlyby ? ' · 6h before closest' : ''}</time></button>
           </div>;
         })}
       </div>
@@ -121,19 +125,18 @@ const CalendarEditor = memo(function CalendarEditor({ initialValue, onChange, on
   );
 });
 
-export function SimulationTimePicker({ value, onChange, onEclipseView }: SimulationTimePickerProps) {
+export function SimulationTimePicker({ value, onChange, onEventView }: SimulationTimePickerProps) {
   const [open, setOpen] = useState(false);
   const [editorValue, setEditorValue] = useState(() => value);
   const onChangeRef = useRef(onChange);
-  const onEclipseViewRef = useRef(onEclipseView);
+  const onEventViewRef = useRef(onEventView);
   useEffect(() => {
     onChangeRef.current = onChange;
-    onEclipseViewRef.current = onEclipseView;
-  }, [onChange, onEclipseView]);
+    onEventViewRef.current = onEventView;
+  }, [onChange, onEventView]);
   const changeEditorDate = useCallback((date: Date) => onChangeRef.current(date), []);
   const selectEventTime = useCallback((event: AstronomyEvent) => {
-    if (event.kind === 'solar-eclipse' && event.observation) onEclipseViewRef.current(event);
-    else onChangeRef.current(event.date);
+    onEventViewRef.current(event);
     setOpen(false);
   }, []);
   const dateLabel = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(value);

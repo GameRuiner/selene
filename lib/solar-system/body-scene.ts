@@ -6,6 +6,8 @@ import { createEarthGrid, createEarthLandmarks } from './earth-overlays';
 import { loadSrgbTexture, type ResourceRegistry } from './resources';
 import type { EarthObserver, LandmarkSelection } from './types';
 import { lunarEclipseStrength, type LunarCoordinates } from '../astronomy/moon';
+import { apophisEncounterBodyRadius, apophisEncounterDisplayBlend } from './apophis-display';
+import { moonDisplayDistance } from './moon-orbit';
 
 export type SceneBody = { body: SolarBody; group: THREE.Group; mesh: THREE.Mesh; ring: THREE.Mesh | null; label: HTMLButtonElement; phase: number };
 export type BodyScene = {
@@ -13,7 +15,7 @@ export type BodyScene = {
   geometry: THREE.SphereGeometry;
   objects: SceneBody[];
   objectByName: Map<BodyName, SceneBody>;
-  orbitLines: { body: SolarBody; line: THREE.LineLoop }[];
+  orbitLines: { body: SolarBody; line: THREE.Line }[];
   earth: SceneBody;
   moon: SceneBody;
   sunGlow: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
@@ -56,6 +58,7 @@ export function createBodyScene(options: {
   const paths = new THREE.Group();
   scene.add(paths);
   const geometry = resources.geometry(new THREE.SphereGeometry(1, 64, 40));
+  const asteroidGeometry = resources.geometry(new THREE.IcosahedronGeometry(1, 2));
   const earthLandmarkMeshes: THREE.Mesh[] = [];
   let earthGridLine: THREE.LineSegments | undefined;
 
@@ -106,7 +109,7 @@ export function createBodyScene(options: {
     resources.material(material);
     const group = new THREE.Group(); scene.add(group);
     const axialTilt = new THREE.Group(); group.add(axialTilt);
-    const mesh = new THREE.Mesh(geometry, material);
+    const mesh = new THREE.Mesh(body.name === 'Apophis' ? asteroidGeometry : geometry, material);
     mesh.scale.setScalar(bodyRadius(body, realScale()));
     if (body.name === 'Earth') axialTilt.rotation.x = -23.44 * degrees;
     else if (body.name === 'Uranus') axialTilt.rotation.z = 1.7;
@@ -134,10 +137,12 @@ export function createBodyScene(options: {
   const orbitLines = objects.flatMap(({ body }) => {
     if (!body.distance) return [];
     const parent = isSatellite(body) ? objectByName.get(body.parent)?.group : paths;
-    const points = Array.from({ length: 256 }, (_, i) => orbitalPosition(body, i / 256 * Math.PI * 2, realScale()));
+    const apophisPath = body.name === 'Apophis';
+    const count = apophisPath ? 257 : 256;
+    const points = Array.from({ length: count }, (_, i) => orbitalPosition(body, i / (apophisPath ? count - 1 : count) * Math.PI * 2, realScale()));
     const orbitGeometry = resources.geometry(new THREE.BufferGeometry().setFromPoints(points));
     const orbitMaterial = resources.material(new THREE.LineBasicMaterial({ color: 0x75829c, transparent: true, opacity: 0.23 }));
-    const line = new THREE.LineLoop(orbitGeometry, orbitMaterial);
+    const line = apophisPath ? new THREE.Line(orbitGeometry, orbitMaterial) : new THREE.LineLoop(orbitGeometry, orbitMaterial);
     line.userData.orbitBody = body; parent?.add(line);
     return [{ body, line }];
   });
@@ -158,8 +163,8 @@ export function createBodyScene(options: {
     refreshOrbitLines() {
       orbitLines.forEach(({ body, line }) => {
         const attribute = line.geometry.getAttribute('position') as THREE.BufferAttribute;
-        for (let i = 0; i < 256; i++) {
-          const point = orbitalPosition(body, i / 256 * Math.PI * 2, realScale());
+        for (let i = 0; i < attribute.count; i++) {
+          const point = orbitalPosition(body, i / (body.name === 'Apophis' ? attribute.count - 1 : attribute.count) * Math.PI * 2, realScale());
           attribute.setXYZ(i, point.x, point.y, point.z);
         }
         attribute.needsUpdate = true; line.geometry.computeBoundingSphere();
@@ -175,21 +180,26 @@ export function updateBodyScene(bodyScene: BodyScene, frame: {
   selected: BodyName | null;
   lunarCoordinates: () => LunarCoordinates;
   exactMoonPosition: (target: THREE.Vector3) => THREE.Vector3;
+  apophisPosition: (target: THREE.Vector3) => boolean;
   exactBodyPosition: (body: AstronomyBody, target: THREE.Vector3) => THREE.Vector3;
   astronomyBodyForTarget: (name: BodyName) => AstronomyBody | undefined;
   lunarShadowUniforms: LunarShadowUniforms;
 }): BodyName | null {
-  const { days, realScale, earthObserver, selected, lunarCoordinates, exactMoonPosition, exactBodyPosition, astronomyBodyForTarget, lunarShadowUniforms } = frame;
-  const { objects, objectByName, earth } = bodyScene;
+  const { days, realScale, earthObserver, selected, lunarCoordinates, exactMoonPosition, apophisPosition, exactBodyPosition, astronomyBodyForTarget, lunarShadowUniforms } = frame;
+  const { objects, objectByName, earth, moon } = bodyScene;
   const selectedBody = selected ? objectByName.get(selected)?.body : undefined;
-  const selectedSystem = selectedBody && isSatellite(selectedBody) ? selectedBody.parent as BodyName : selected;
+  let selectedSystem = selectedBody && isSatellite(selectedBody) ? selectedBody.parent as BodyName : selected;
+  let apophisUsesEphemeris = false;
+  let displayBlend = 1;
   objects.forEach(({ body, group, mesh, ring, phase, label }) => {
     const angle = orbitalAngle(body, days, phase);
     if (body.name === 'Moon') {
       const { phaseAngle } = lunarCoordinates();
       exactMoonPosition(group.position);
-      if (!realScale) group.position.sub(earth.group.position).setLength(orbitRadius(body, false)).add(earth.group.position);
       mesh.rotation.y = -phaseAngle;
+    } else if (body.name === 'Apophis' && apophisPosition(group.position)) {
+      apophisUsesEphemeris = true;
+      mesh.rotation.y = days / body.rotationPeriod * Math.PI * 2;
     } else {
       if (body.distance) {
         const astronomyBody = astronomyBodyForTarget(body.name);
@@ -208,8 +218,21 @@ export function updateBodyScene(bodyScene: BodyScene, frame: {
     if (ring) ring.visible = !earthObserver;
     label.classList.toggle('selected', earthObserver ? earthObserver.target === body.name : selected === body.name);
   });
+  if (apophisUsesEphemeris && !earthObserver) {
+    const apophis = objectByName.get('Apophis')!;
+    const separation = earth.group.position.distanceTo(apophis.group.position);
+    displayBlend = apophisEncounterDisplayBlend(separation);
+    earth.mesh.scale.setScalar(apophisEncounterBodyRadius(earth.body, separation, realScale));
+    moon.mesh.scale.setScalar(apophisEncounterBodyRadius(moon.body, separation, realScale));
+    apophis.mesh.scale.setScalar(apophisEncounterBodyRadius(apophis.body, separation, realScale));
+    if (selected === 'Apophis' && displayBlend < 1) selectedSystem = 'Earth';
+  }
+  if (!realScale) {
+    const offset = moon.group.position.sub(earth.group.position);
+    offset.setLength(moonDisplayDistance(offset.length(), orbitRadius(moon.body, false), displayBlend)).add(earth.group.position);
+  }
   lunarShadowUniforms.uEarthPosition.value.copy(earth.group.position);
-  lunarShadowUniforms.uEarthRadius.value = bodyRadius(earth.body, realScale);
+  lunarShadowUniforms.uEarthRadius.value = earth.mesh.scale.x;
   lunarShadowUniforms.uSunRadius.value = bodyRadius(objects[0].body, realScale);
   lunarShadowUniforms.uEclipseStrength.value = lunarEclipseStrength(lunarCoordinates());
   return selectedSystem;
@@ -226,11 +249,12 @@ export function updateBodyLabels(bodyScene: BodyScene, frame: {
   height: number;
 }): void {
   const { camera, observerMarkers, earthObserver, selectedSystem, labels, realScale, width, height } = frame;
-  bodyScene.objects.forEach(({ body, group, label }) => {
-    const labelOffset = realScale ? bodyRadius(body, realScale) * 0.25 : 0.55;
+  bodyScene.objects.forEach(({ body, group, mesh, label }) => {
+    const radius = mesh.scale.x;
+    const labelOffset = realScale ? radius * 0.25 : 0.55 * radius / body.radius;
     const observerMarker = observerMarkers.get(body.name);
     const projected = bodyScene.projected.copy(observerMarker?.visible ? observerMarker.position : group.position);
-    if (!earthObserver) projected.y += bodyRadius(body, realScale) + labelOffset;
+    if (!earthObserver) projected.y += radius + labelOffset;
     projected.project(camera);
     const inSelectedSystem = !isSatellite(body) || selectedSystem === body.parent;
     const visibleInObserver = Boolean(earthObserver && observerMarker?.visible && !observerMarker.userData.eclipseHidden);
